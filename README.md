@@ -1,4 +1,4 @@
-# 🏥 HEALIO — Advanced Clinical Intelligence & Public Health Platform
+# 🏥 HEALIO - Advanced Clinical Intelligence & Public Health Platform
 
 [![Vercel Deployment](https://img.shields.io/badge/Vercel-Live_Deployment-black?logo=vercel)](https://healio-ai-chatbot-3gloycz0q-sarusarvesh993-cybers-projects.vercel.app)
 [![FastAPI](https://img.shields.io/badge/FastAPI-v0.110-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
