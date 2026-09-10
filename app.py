@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Header, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -74,27 +74,30 @@ def root():
         .animate-breathe { animation: breathe 8s infinite ease-in-out; }
 
         /* Clean Markdown & Table Styling */
+        .markdown-content hr {
+            display: none !important;
+        }
         .markdown-content table {
             width: 100%;
             border-collapse: collapse;
-            margin: 12px 0;
-            font-size: 0.8rem;
+            margin: 14px 0;
+            font-size: 0.825rem;
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
+            border-radius: 14px;
             overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
         }
         .markdown-content th {
             background-color: #f0f9ff;
             color: #0369a1;
             font-weight: 700;
-            padding: 9px 12px;
+            padding: 10px 14px;
             border-bottom: 1px solid #cbd5e1;
             text-align: left;
         }
         .markdown-content td {
-            padding: 8px 12px;
+            padding: 9px 14px;
             border-bottom: 1px solid #f1f5f9;
             color: #334155;
             vertical-align: top;
@@ -107,22 +110,23 @@ def root():
         }
         .markdown-content ul {
             list-style-type: disc;
-            padding-left: 20px;
-            margin: 8px 0;
+            padding-left: 22px;
+            margin: 10px 0;
         }
         .markdown-content ol {
             list-style-type: decimal;
-            padding-left: 20px;
-            margin: 8px 0;
+            padding-left: 22px;
+            margin: 10px 0;
         }
         .markdown-content li {
-            margin-bottom: 4px;
+            margin-bottom: 5px;
+            color: #334155;
         }
         .markdown-content h1, .markdown-content h2, .markdown-content h3 {
             font-weight: 800;
             color: #0f172a;
-            margin-top: 14px;
-            margin-bottom: 6px;
+            margin-top: 16px;
+            margin-bottom: 8px;
         }
         .markdown-content h1 { font-size: 1.15rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
         .markdown-content h2 { font-size: 1.05rem; }
@@ -131,17 +135,12 @@ def root():
             font-weight: 700;
             color: #0f172a;
         }
-        .markdown-content hr {
-            border: none;
-            border-top: 1px solid #e2e8f0;
-            margin: 14px 0;
-        }
         .markdown-content blockquote {
             border-left: 4px solid #38bdf8;
-            padding: 6px 12px;
+            padding: 8px 14px;
             background: #f0f9ff;
-            border-radius: 0 8px 8px 0;
-            margin: 8px 0;
+            border-radius: 0 10px 10px 0;
+            margin: 10px 0;
             font-style: italic;
             color: #0369a1;
         }
@@ -340,60 +339,41 @@ def root():
     <!-- Main Tab Content Area -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 w-full flex-1">
         
-        <!-- TAB 1: AI CLINICAL COMPANION (CHAT) -->
+        <!-- TAB 1: AI CLINICAL COMPANION (CHAT - EXPANDED FULL-WIDTH) -->
         <div id="tab-content-chat" class="tab-content">
-            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div class="lg:col-span-3 bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col h-[640px]">
-                    
-                    <!-- 4-7-8 Breathing Circle -->
-                    <div id="breathingBox" class="hidden mb-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center relative">
-                        <button onclick="document.getElementById('breathingBox').classList.add('hidden')" class="absolute top-2 right-3 text-xs text-emerald-700 hover:text-emerald-900 font-bold">✕ Close</button>
-                        <h4 class="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">🧘 4-7-8 Calm Breathing Protocol</h4>
-                        <p class="text-xs text-emerald-700 mb-2">Inhale (4s) ➔ Hold (7s) ➔ Exhale slowly (8s)</p>
-                        <div class="w-16 h-16 rounded-full mx-auto bg-sky-500 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-sky-500/30 animate-breathe">Breathe</div>
-                    </div>
+            <div class="max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm flex flex-col h-[700px]">
+                
+                <!-- 4-7-8 Breathing Circle -->
+                <div id="breathingBox" class="hidden mb-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center relative">
+                    <button onclick="document.getElementById('breathingBox').classList.add('hidden')" class="absolute top-2 right-3 text-xs text-emerald-700 hover:text-emerald-900 font-bold">✕ Close</button>
+                    <h4 class="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">🧘 4-7-8 Calm Breathing Protocol</h4>
+                    <p class="text-xs text-emerald-700 mb-2">Inhale (4s) ➔ Hold (7s) ➔ Exhale slowly (8s)</p>
+                    <div class="w-16 h-16 rounded-full mx-auto bg-sky-500 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-sky-500/30 animate-breathe">Breathe</div>
+                </div>
 
-                    <!-- Chat Message Area -->
-                    <div id="chatMessages" class="flex-1 overflow-y-auto pr-2 space-y-3.5">
-                        <div class="flex items-start gap-3">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                            <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed markdown-content">
-                                Hello! I am <strong>HEALIO</strong>, your clinical intelligence and public health companion. Ask me any medical query, meal planning request, drug question, or symptom concern.
-                            </div>
+                <!-- Chat Message Area -->
+                <div id="chatMessages" class="flex-1 overflow-y-auto pr-2 space-y-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
+                        <div class="max-w-[92%] sm:max-w-[88%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed markdown-content">
+                            Hello! I am <strong>HEALIO</strong>, your senior clinical intelligence companion. Ask me any medical query, nutritional meal plan, drug analysis, or symptom concern.
                         </div>
-                    </div>
-
-                    <!-- Quick Inquiries Chips -->
-                    <div class="py-2.5 flex flex-wrap gap-2 border-t border-slate-100 mt-2">
-                        <button onclick="sendQuickPrompt('Provide a structured 1-day sample meal plan for low-glycemic nutrition with meal times, foods, and benefits.')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🥗 Low-GI Meal Plan</button>
-                        <button onclick="sendQuickPrompt('What evidence-based lifestyle changes lower fasting blood glucose?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩸 Lower Blood Sugar</button>
-                        <button onclick="sendQuickPrompt('Can Paracetamol and Ibuprofen be taken together safely?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">💊 Paracetamol + Ibuprofen</button>
-                        <button onclick="sendQuickPrompt('What key clinical questions should I prepare for my upcoming doctor visit?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩺 Questions for Doctor</button>
-                    </div>
-
-                    <!-- Chat Input -->
-                    <div class="pt-2 flex items-center gap-2">
-                        <button onclick="startVoiceRecognition()" id="micBtn" class="p-2.5 rounded-xl border bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200 transition" title="Voice Input">🎙️</button>
-                        <input id="chatInput" type="text" placeholder="Type or dictate your health question..." onkeydown="if(event.key==='Enter') sendMessage()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-sky-500 outline-none">
-                        <button onclick="sendMessage()" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md transition font-bold text-sm px-4">Send</button>
                     </div>
                 </div>
 
-                <!-- Sidebar Details -->
-                <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
-                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">🏥 Patient Information</h3>
-                    <div class="p-3.5 rounded-2xl bg-sky-50 border border-sky-100">
-                        <div class="text-xs font-semibold text-sky-900">Current AI Model</div>
-                        <div id="sidebarModelDisplay" class="text-sm font-bold text-sky-700 break-words">llama-3.1-8b-instant</div>
-                    </div>
-                    <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-100">
-                        <div class="text-xs font-semibold text-amber-900">Emergency Red Flag</div>
-                        <div class="text-xs text-amber-800 mt-1">If experiencing chest tightness or sudden facial numbness, call <strong>108 / 911</strong> immediately.</div>
-                    </div>
-                    <div class="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-100">
-                        <div class="text-xs font-semibold text-emerald-900">100% Confidential</div>
-                        <div class="text-xs text-emerald-800 mt-1">Zero medical data is sold to commercial advertisers.</div>
-                    </div>
+                <!-- Quick Inquiries Chips -->
+                <div class="py-2.5 flex flex-wrap gap-2 border-t border-slate-100 mt-3">
+                    <button onclick="sendQuickPrompt('Provide a structured 1-day sample meal plan for low-glycemic nutrition with meal times, foods, and benefits.')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🥗 Low-GI Meal Plan</button>
+                    <button onclick="sendQuickPrompt('What evidence-based lifestyle changes lower fasting blood glucose?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩸 Lower Blood Sugar</button>
+                    <button onclick="sendQuickPrompt('Can Paracetamol and Ibuprofen be taken together safely?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">💊 Paracetamol + Ibuprofen</button>
+                    <button onclick="sendQuickPrompt('What key clinical questions should I prepare for my upcoming doctor visit?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩺 Questions for Doctor</button>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="pt-2 flex items-center gap-2">
+                    <button onclick="startVoiceRecognition()" id="micBtn" class="p-2.5 rounded-xl border bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200 transition" title="Voice Input">🎙️</button>
+                    <input id="chatInput" type="text" placeholder="Type or dictate your health question..." onkeydown="if(event.key==='Enter') sendMessage()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-sky-500 outline-none">
+                    <button onclick="sendMessage()" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md transition font-bold text-sm px-5">Send</button>
                 </div>
             </div>
         </div>
@@ -637,7 +617,7 @@ def root():
     </main>
 
     <!-- Footer -->
-    <footer class="bg-white border-t border-slate-200 py-6 mt-8">
+    <footer class="bg-white/80 backdrop-blur-md py-6 mt-8">
         <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 space-y-1">
             <p class="font-bold text-slate-700">🏥 HEALIO — Enterprise Clinical Intelligence & Public Health Platform</p>
             <p class="text-[11px] text-slate-400">Medical Disclaimer: HEALIO provides evidence-based guidance, generic price transparency, and dispute preparation for educational purposes. Always consult a licensed medical professional for emergency diagnoses.</p>
@@ -702,9 +682,7 @@ def root():
 
         function updateModelBadge(modelName) {
             const badge = document.getElementById('headerModelBadge');
-            const sidebar = document.getElementById('sidebarModelDisplay');
             if (badge) badge.innerText = '⚡ ' + modelName;
-            if (sidebar) sidebar.innerText = modelName;
         }
 
         function saveApiKey() {
@@ -803,7 +781,7 @@ def root():
                         message: text, 
                         language: lang, 
                         api_key: key, 
-                        model: model,
+                        model: model, 
                         provider: provider,
                         endpoint: endpoint
                     })
@@ -815,7 +793,7 @@ def root():
                 chatMessages.innerHTML += `
                     <div class="flex items-start gap-3 justify-start">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                        <div class="max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>
+                        <div class="max-w-[92%] sm:max-w-[88%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>
                     </div>`;
             } catch (e) {
                 chatMessages.innerHTML += `
@@ -873,10 +851,10 @@ def root():
                         `<strong>🏷️ PMBJP Code:</strong> ${data.jan_aushadhi_code}<br/>` +
                         `<strong>🔬 Bioequivalence:</strong> FDA Orange Book AB-Rated (Equal Therapeutic Absorption & Kinetics)`;
                 } else {
-                    resBox.innerText = `Active Generic Molecule: Formulated Salt\nAverage Cost Savings: 70% to 85% vs Commercial Brand\nAsk your pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated equivalent.`;
+                    resBox.innerText = `Active Generic Molecule: Formulated Salt\\nAverage Cost Savings: 70% to 85% vs Commercial Brand\\nAsk your pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated equivalent.`;
                 }
             } catch (e) {
-                resBox.innerText = `Active Molecule: Generic Salt Equivalent\nSavings: 70% - 85% Cheaper\nAsk your pharmacist for Jan Aushadhi (PMBJP) equivalent.`;
+                resBox.innerText = `Active Molecule: Generic Salt Equivalent\\nSavings: 70% - 85% Cheaper\\nAsk your pharmacist for Jan Aushadhi (PMBJP) equivalent.`;
             }
         }
 
@@ -894,11 +872,11 @@ def root():
             const appealText = document.getElementById('appealText');
             resBox.classList.remove('hidden');
 
-            lastAppealData = `FORMAL HEALTH INSURANCE APPEAL NOTICE\n` +
-                `Policyholder: ${patient} | Policy #: ${policy} | Claim ID: #${claim}\n` +
-                `Insurer / TPA: ${insurer}\n` +
-                `Disputed Deduction: ${denied} (of ${total})\n\n` +
-                `Grounds for Reversal:\nUnder the IRDAI Master Circular (2024), arbitrary hospital deductions under '${reason}' are contestable. The attending physician documented non-elective medical necessity. Full disbursement of ${denied} is demanded within 15 days.`;
+            lastAppealData = `FORMAL HEALTH INSURANCE APPEAL NOTICE\\n` +
+                `Policyholder: ${patient} | Policy #: ${policy} | Claim ID: #${claim}\\n` +
+                `Insurer / TPA: ${insurer}\\n` +
+                `Disputed Deduction: ${denied} (of ${total})\\n\\n` +
+                `Grounds for Reversal:\\nUnder the IRDAI Master Circular (2024), arbitrary hospital deductions under '${reason}' are contestable. The attending physician documented non-elective medical necessity. Full disbursement of ${denied} is demanded within 15 days.`;
 
             appealText.innerText = lastAppealData;
         }
@@ -931,9 +909,9 @@ def root():
             const drugs = document.getElementById('drugsInput').value;
             const box = document.getElementById('drugResultBox');
             box.classList.remove('hidden');
-            box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\n` +
-                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID Interaction)\n` +
-                `- Mechanism: Co-administration severely increases gastrointestinal bleeding and ulcer risk.\n` +
+            box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\\n` +
+                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID Interaction)\\n` +
+                `- Mechanism: Co-administration severely increases gastrointestinal bleeding and ulcer risk.\\n` +
                 `- Clinical Advice: Do not take together without direct physician supervision.`;
         }
 
@@ -945,10 +923,10 @@ def root():
 
             const box = document.getElementById('triageResultBox');
             box.classList.remove('hidden');
-            box.innerText = `### 🚨 ESI Triage Assessment: LEVEL 2 (EMERGENT)\n` +
-                `- Location: ${body} | Primary Complaint: ${sym}\n` +
-                `- Pain Severity: ${pain}/10 | Duration: ${dur}\n` +
-                `- Acuity Score: ESI-2 (High Risk / Emergent Evaluation Warranted)\n` +
+            box.innerText = `### 🚨 ESI Triage Assessment: LEVEL 2 (EMERGENT)\\n` +
+                `- Location: ${body} | Primary Complaint: ${sym}\\n` +
+                `- Pain Severity: ${pain}/10 | Duration: ${dur}\\n` +
+                `- Acuity Score: ESI-2 (High Risk / Emergent Evaluation Warranted)\\n` +
                 `- Action Plan: Immediate clinical evaluation at nearest Emergency Department (ED). Do not drive alone.`;
         }
     </script>
@@ -1009,13 +987,13 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
             endpoint = req.endpoint.strip()
 
         system_prompt = (
-            f"You are HEALIO, a senior clinical intelligence and public health AI system. "
+            f"You are HEALIO, an advanced clinical intelligence and public health AI assistant. "
             f"Provide original, plagiarism-free, highly structured and professional medical/health responses in {req.language}. "
-            f"Formatting rules:\n"
+            f"Formatting guidelines:\n"
             f"1. When answering requests involving schedules, meal plans, comparison matrices, or lab parameters, present them in clean Markdown tables.\n"
             f"2. Use structured bullet points, clear bold takeaways, and concise paragraphs.\n"
-            f"3. Never output raw unformatted ASCII slashes or clutter.\n"
-            f"4. Conclude with a clear, 1-line professional medical disclaimer."
+            f"3. Never output raw separator lines (---) or ASCII clutter.\n"
+            f"4. Conclude with a clean 1-line professional medical disclaimer."
         )
 
         try:
@@ -1041,9 +1019,8 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
                 err_msg = error_body.get("error", {}).get("message", str(error_body)) if isinstance(error_body, dict) else str(error_body)
                 return {
                     "response": f"⚠️ **{endpoint.split('/')[2]} Error ({res.status_code}):** {err_msg}\n\n"
-                                f"👉 *Tip: Open **'⚙️ Model & Key Settings'** in the top bar to select a working model (e.g. `llama-3.1-8b-instant` for Groq or `meta-llama/llama-3.3-70b-instruct:free` for OpenRouter).* \n\n"
-                                f"---\n\n"
-                                f"### 🩺 HEALIO Guidance on: \"{req.message}\"\n"
+                                f"👉 *Tip: Open **'⚙️ Model & Key Settings'** in the top bar to select a working model (e.g. `llama-3.1-8b-instant` for Groq or `meta-llama/llama-3.3-70b-instruct:free` for OpenRouter).*\n\n"
+                                f"### 🩺 HEALIO Clinical Summary for: \"{req.message}\"\n"
                                 f"| Category | Clinical Recommendation | Rationale |\n"
                                 f"| :--- | :--- | :--- |\n"
                                 f"| **Nutritional Focus** | Low-glycemic complex carbohydrates (lentils, oats, chia seeds, vegetables) | Prevents acute glycemic spikes and sustains insulin sensitivity |\n"
