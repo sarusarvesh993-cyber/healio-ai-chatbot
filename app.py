@@ -7,7 +7,7 @@ import os
 import requests
 
 app = FastAPI(
-    title="HEALIO — Advanced Clinical Intelligence & Public Health Platform",
+    title="HEALIO · Advanced Clinical Intelligence & Public Health Platform",
     description="Universal clinical intelligence platform: Generic drug price savings, Insurance denial dispute letters, OpenFDA drug safety, and ESI Triage.",
     version="2.0.0"
 )
@@ -60,13 +60,23 @@ def root():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEALIO — Advanced Clinical Intelligence Platform</title>
+    <title>HEALIO · Advanced Clinical Intelligence Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        html, body, div, main, * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -ms-overflow-style: none !important;
+            scrollbar-width: none !important;
+        }
+        *::-webkit-scrollbar, html::-webkit-scrollbar, body::-webkit-scrollbar, div::-webkit-scrollbar {
+            display: none !important;
+            width: 0px !important;
+            height: 0px !important;
+            background: transparent !important;
+        }
         @keyframes breathe {
             0%, 100% { transform: scale(0.8); background-color: #38bdf8; }
             50% { transform: scale(1.18); background-color: #0284c7; }
@@ -394,7 +404,7 @@ def root():
                     </div>
                     <div>
                         <label class="text-xs font-bold text-slate-700 block mb-1">Currency</label>
-                        <select id="currencySelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white">
+                        <select id="currencySelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:emerald-500 outline-none bg-white">
                             <option value="INR (₹)">INR (₹)</option>
                             <option value="USD ($)">USD ($)</option>
                         </select>
@@ -619,7 +629,8 @@ def root():
     <!-- Footer -->
     <footer class="bg-white/80 backdrop-blur-md py-6 mt-8">
         <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 space-y-1">
-            <p class="font-bold text-slate-700">🏥 HEALIO — Enterprise Clinical Intelligence & Public Health Platform</p>
+            <p class="font-bold text-slate-700 text-sm">🏥 HEALIO</p>
+            <p class="text-xs text-slate-500 font-medium">Enterprise Clinical Intelligence & Public Health Platform</p>
             <p class="text-[11px] text-slate-400">Medical Disclaimer: HEALIO provides evidence-based guidance, generic price transparency, and dispute preparation for educational purposes. Always consult a licensed medical professional for emergency diagnoses.</p>
         </div>
     </footer>
