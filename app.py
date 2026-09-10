@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Header
+﻿from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import os
@@ -21,9 +21,9 @@ app.add_middleware(
 )
 
 GENERIC_BENCHMARKS = {
-    "augmentin": {"salt": "Amoxicillin (500mg) + Clavulanic Acid (125mg)", "branded": 230, "generic": 48, "savings": 79, "code": "PMBJP-00124", "category": "Antibiotic"},
+    "augmentin": {"salt": "Amoxicillin (500mg) + Clavulanic Acid (125mg)", "branded": 230, "generic": 48, "savings": 79, "code": "PMBJP-00124", "category": "Antibiotic (Broad Spectrum)"},
     "pan-d": {"salt": "Pantoprazole (40mg) + Domperidone (30mg SR)", "branded": 195, "generic": 38, "savings": 81, "code": "PMBJP-00412", "category": "Gastroenterology / Antacid"},
-    "telma": {"salt": "Telmisartan (40mg)", "branded": 140, "generic": 22, "savings": 84, "code": "PMBJP-00789", "category": "Cardiovascular / Hypertension"},
+    "telma": {"salt": "Telmisartan (40mg)", "branded": 140, "generic": 22, "savings": 84, "code": "PMBJP-00789", "category": "Cardiovascular / Blood Pressure"},
     "lipitor": {"salt": "Atorvastatin Calcium (20mg)", "branded": 185, "generic": 30, "savings": 84, "code": "PMBJP-00330", "category": "Cholesterol Lowering"},
     "atorva": {"salt": "Atorvastatin Calcium (10mg / 20mg)", "branded": 175, "generic": 28, "savings": 84, "code": "PMBJP-00330", "category": "Cholesterol Lowering"},
     "glycomet": {"salt": "Metformin Hydrochloride (500mg SR)", "branded": 65, "generic": 14, "savings": 78, "code": "PMBJP-00215", "category": "Diabetes Mellitus"},
@@ -33,6 +33,7 @@ GENERIC_BENCHMARKS = {
 class ChatRequest(BaseModel):
     message: str
     language: Optional[str] = "English"
+    api_key: Optional[str] = ""
 
 class GenericRequest(BaseModel):
     drug_name: str
@@ -89,6 +90,7 @@ def root():
             </div>
 
             <div class="flex items-center gap-2 sm:gap-4">
+                <!-- Language Selector -->
                 <select id="langSelect" class="bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg px-2.5 py-1.5 border border-slate-200 outline-none cursor-pointer">
                     <option value="English">🌐 English</option>
                     <option value="Hindi">हिन्दी (Hindi)</option>
@@ -100,10 +102,12 @@ def root():
                     <option value="German">Deutsch</option>
                 </select>
 
+                <!-- Emergency Hotline Badge -->
                 <div class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
                     <span>🚨 108 / 911</span>
                 </div>
 
+                <!-- API Key Config Button -->
                 <button onclick="toggleSettingsModal()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold px-3 py-1.5 rounded-lg border border-sky-200 transition">
                     🔑 API Settings
                 </button>
@@ -115,12 +119,12 @@ def root():
     <div id="settingsModal" class="hidden bg-sky-900/10 border-b border-sky-200 p-4 transition">
         <div class="max-w-4xl mx-auto bg-white rounded-2xl p-5 shadow-lg border border-sky-100 flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div class="flex-1 w-full">
-                <h4 class="text-sm font-bold text-slate-800 mb-1">🔑 Optional OpenRouter / OpenAI API Key</h4>
-                <p class="text-xs text-slate-500 mb-2">HEALIO works automatically. You can paste an API key for custom LLM models.</p>
-                <input id="customApiKey" type="password" placeholder="sk-or-... / sk-... API key" class="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
+                <h4 class="text-sm font-bold text-slate-800 mb-1">🔑 Universal API Key (OpenRouter / OpenAI / Groq)</h4>
+                <p class="text-xs text-slate-500 mb-2">Paste your key once. It will be saved securely in your browser session.</p>
+                <input id="customApiKey" type="password" placeholder="sk-or-... / sk-... / gsk_... API key" class="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
             </div>
-            <button onclick="toggleSettingsModal()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-md transition">
-                Save & Close
+            <button onclick="saveApiKey()" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-md transition">
+                Save & Apply
             </button>
         </div>
     </div>
@@ -203,7 +207,7 @@ def root():
                     <div id="chatMessages" class="flex-1 overflow-y-auto pr-2 space-y-3.5">
                         <div class="flex items-start gap-3">
                             <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                            <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200">
+                            <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed">
                                 Hello! I am <strong>HEALIO</strong>, your clinical intelligence and public health companion. Ask me any medical query, drug question, or symptom concern.
                             </div>
                         </div>
@@ -230,7 +234,7 @@ def root():
                     <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">🏥 Patient Information</h3>
                     <div class="p-3.5 rounded-2xl bg-sky-50 border border-sky-100">
                         <div class="text-xs font-semibold text-sky-900">Current AI Model</div>
-                        <div class="text-sm font-bold text-sky-700">HEALIO Cloud Intelligence</div>
+                        <div class="text-sm font-bold text-sky-700">HEALIO Universal Intelligence</div>
                     </div>
                     <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-100">
                         <div class="text-xs font-semibold text-amber-900">Emergency Red Flag</div>
@@ -492,6 +496,23 @@ def root():
 
     <!-- Interactive Client Scripts -->
     <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('healio_api_key');
+            if (savedKey) {
+                document.getElementById('customApiKey').value = savedKey;
+            }
+        });
+
+        function saveApiKey() {
+            const key = document.getElementById('customApiKey').value.trim();
+            if (key) {
+                localStorage.setItem('healio_api_key', key);
+            } else {
+                localStorage.removeItem('healio_api_key');
+            }
+            toggleSettingsModal();
+        }
+
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -528,17 +549,25 @@ def root():
                 document.getElementById('breathingBox').classList.remove('hidden');
             }
 
+            const key = (document.getElementById('customApiKey').value || localStorage.getItem('healio_api_key') || '').trim();
+            const lang = document.getElementById('langSelect').value;
+
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, language: document.getElementById('langSelect').value })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(key ? { 'Authorization': 'Bearer ' + key } : {})
+                    },
+                    body: JSON.stringify({ message: text, language: lang, api_key: key })
                 });
                 const data = await res.json();
+                const responseText = (data && data.response) ? data.response : "Thank you for sharing your concerns with HEALIO.";
+                
                 chatMessages.innerHTML += `
                     <div class="flex items-start gap-3 justify-start">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                        <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed">${data.response}</div>
+                        <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed whitespace-pre-wrap">${responseText}</div>
                     </div>`;
             } catch (e) {
                 chatMessages.innerHTML += `
@@ -596,10 +625,10 @@ def root():
                         `<strong>🏷️ PMBJP Code:</strong> ${data.jan_aushadhi_code}<br/>` +
                         `<strong>🔬 Bioequivalence:</strong> FDA Orange Book AB-Rated (Equal Therapeutic Absorption & Kinetics)`;
                 } else {
-                    resBox.innerText = `Active Generic Molecule: Formulated Salt\\nAverage Cost Savings: 70% to 85% vs Commercial Brand\\nAsk your pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated equivalent.`;
+                    resBox.innerText = `Active Generic Molecule: Formulated Salt\nAverage Cost Savings: 70% to 85% vs Commercial Brand\nAsk your pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated equivalent.`;
                 }
             } catch (e) {
-                resBox.innerText = `Active Molecule: Generic Salt Equivalent\\nSavings: 70% - 85% Cheaper\\nAsk your pharmacist for Jan Aushadhi (PMBJP) equivalent.`;
+                resBox.innerText = `Active Molecule: Generic Salt Equivalent\nSavings: 70% - 85% Cheaper\nAsk your pharmacist for Jan Aushadhi (PMBJP) equivalent.`;
             }
         }
 
@@ -617,11 +646,11 @@ def root():
             const appealText = document.getElementById('appealText');
             resBox.classList.remove('hidden');
 
-            lastAppealData = `FORMAL HEALTH INSURANCE APPEAL NOTICE\\n` +
-                `Policyholder: ${patient} | Policy #: ${policy} | Claim ID: #${claim}\\n` +
-                `Insurer / TPA: ${insurer}\\n` +
-                `Disputed Deduction: ${denied} (of ${total})\\n\\n` +
-                `Grounds for Reversal:\\nUnder the IRDAI Master Circular (2024), arbitrary hospital deductions under '${reason}' are contestable. The attending physician documented non-elective medical necessity. Full disbursement of ${denied} is demanded within 15 days.`;
+            lastAppealData = `FORMAL HEALTH INSURANCE APPEAL NOTICE\n` +
+                `Policyholder: ${patient} | Policy #: ${policy} | Claim ID: #${claim}\n` +
+                `Insurer / TPA: ${insurer}\n` +
+                `Disputed Deduction: ${denied} (of ${total})\n\n` +
+                `Grounds for Reversal:\nUnder the IRDAI Master Circular (2024), arbitrary hospital deductions under '${reason}' are contestable. The attending physician documented non-elective medical necessity. Full disbursement of ${denied} is demanded within 15 days.`;
 
             appealText.innerText = lastAppealData;
         }
@@ -654,9 +683,9 @@ def root():
             const drugs = document.getElementById('drugsInput').value;
             const box = document.getElementById('drugResultBox');
             box.classList.remove('hidden');
-            box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\\n` +
-                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID Interaction)\\n` +
-                `- Mechanism: Co-administration severely increases gastrointestinal bleeding and ulcer risk.\\n` +
+            box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\n` +
+                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID Interaction)\n` +
+                `- Mechanism: Co-administration severely increases gastrointestinal bleeding and ulcer risk.\n` +
                 `- Clinical Advice: Do not take together without direct physician supervision.`;
         }
 
@@ -668,15 +697,97 @@ def root():
 
             const box = document.getElementById('triageResultBox');
             box.classList.remove('hidden');
-            box.innerText = `### 🚨 ESI Triage Assessment: LEVEL 2 (EMERGENT)\\n` +
-                `- Location: ${body} | Primary Complaint: ${sym}\\n` +
-                `- Pain Severity: ${pain}/10 | Duration: ${dur}\\n` +
-                `- Acuity Score: ESI-2 (High Risk / Emergent Evaluation Warranted)\\n` +
+            box.innerText = `### 🚨 ESI Triage Assessment: LEVEL 2 (EMERGENT)\n` +
+                `- Location: ${body} | Primary Complaint: ${sym}\n` +
+                `- Pain Severity: ${pain}/10 | Duration: ${dur}\n` +
+                `- Acuity Score: ESI-2 (High Risk / Emergent Evaluation Warranted)\n` +
                 `- Action Plan: Immediate clinical evaluation at nearest Emergency Department (ED). Do not drive alone.`;
         }
     </script>
 </body>
 </html>""")
+
+@app.post("/api/generic-saver")
+def generic_saver(req: GenericRequest):
+    clean = req.drug_name.lower().strip()
+    for key, data in GENERIC_BENCHMARKS.items():
+        if key in clean:
+            return {
+                "drug": req.drug_name,
+                "salt": data["salt"],
+                "branded_price": f"₹{data['branded']}",
+                "generic_price": f"₹{data['generic']}",
+                "savings": f"{data['savings']}% CHEAPER",
+                "jan_aushadhi_code": data["code"]
+            }
+    return {
+        "drug": req.drug_name,
+        "salt": "Identical active pharmaceutical molecule",
+        "savings": "70% to 85% Savings vs Commercial Brand",
+        "guidance": "Ask pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated generic version."
+    }
+
+@app.post("/api/insurance-appeal")
+def insurance_appeal(req: AppealRequest):
+    return {
+        "claim_id": req.claim_id,
+        "status": "Appeal Drafted",
+        "grounds": f"Under prevailing regulatory guidelines (IRDAI Master Circular 2024), deductions under '{req.denial_reason}' are contestable. Attending physician at {req.hospital_name} substantiated active medical necessity.",
+        "appeal_letter": f"To: Grievance Redressal Officer, {req.insurer_name}\nSubject: Formal Appeal - Claim #{req.claim_id}\n\nI am formally disputing the deduction of {req.denied_amount} against total bill {req.total_billed}. The medical interventions were non-elective and necessary. Please disburse the withheld amount within 15 days.\n\nSincerely,\n{req.patient_name}"
+    }
+
+@app.post("/api/chat")
+def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
+    auth_header = authorization if isinstance(authorization, str) else ""
+    key = (req.api_key or (auth_header.replace("Bearer ", "").strip() if auth_header else "") or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")).strip()
+
+    if key:
+        endpoint = "https://openrouter.ai/api/v1/chat/completions"
+        model = "meta-llama/llama-3.3-70b-instruct"
+
+        if key.startswith("sk-") and not key.startswith("sk-or-"):
+            endpoint = "https://api.openai.com/v1/chat/completions"
+            model = "gpt-4o-mini"
+        elif key.startswith("gsk_"):
+            endpoint = "https://api.groq.com/openai/v1/chat/completions"
+            model = "llama-3.3-70b-versatile"
+
+        try:
+            res = requests.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": f"You are HEALIO, a compassionate, highly empathetic clinical intelligence assistant. Respond fluently in {req.language}. Use clear bullet points and bold takeaways. Always conclude with a brief medical disclaimer."
+                        },
+                        {"role": "user", "content": req.message}
+                    ]
+                },
+                timeout=18
+            )
+            if res.status_code == 200:
+                data = res.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if content:
+                    return {"response": content}
+            else:
+                error_msg = res.text[:200]
+                return {"response": f"⚠️ Provider returned HTTP {res.status_code}: {error_msg}. Falling back to HEALIO guidance."}
+        except Exception as e:
+            return {"response": f"⚠️ Connection error: {str(e)}"}
+
+    return {
+        "response": f"Thank you for sharing your concern: \"{req.message}\".\n\n"
+                    f"### 🩺 Clinical Recommendations\n"
+                    f"- **Hydration & Rest:** Maintain fluid intake and avoid strenuous activity while monitoring your body's response.\n"
+                    f"- **Symptom Diary:** Note the exact time of onset, triggers, and pain severity (1-10).\n"
+                    f"- **Clinical Consultation:** If symptoms persist over 24-48 hours or worsen, schedule an evaluation with your primary physician.\n\n"
+                    f"*(Tip: Paste your OpenRouter or OpenAI API key in the top right 'API Settings' to enable custom AI models)*\n\n"
+                    f"**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."
+    }
 
 if __name__ == "__main__":
     import uvicorn
