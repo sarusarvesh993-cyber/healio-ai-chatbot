@@ -63,6 +63,7 @@ def root():
     <title>HEALIO — Advanced Clinical Intelligence Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -71,6 +72,79 @@ def root():
             50% { transform: scale(1.18); background-color: #0284c7; }
         }
         .animate-breathe { animation: breathe 8s infinite ease-in-out; }
+
+        /* Clean Markdown & Table Styling */
+        .markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: 0.8rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .markdown-content th {
+            background-color: #f0f9ff;
+            color: #0369a1;
+            font-weight: 700;
+            padding: 9px 12px;
+            border-bottom: 1px solid #cbd5e1;
+            text-align: left;
+        }
+        .markdown-content td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+            vertical-align: top;
+        }
+        .markdown-content tr:nth-child(even) td {
+            background-color: #f8fafc;
+        }
+        .markdown-content tr:last-child td {
+            border-bottom: none;
+        }
+        .markdown-content ul {
+            list-style-type: disc;
+            padding-left: 20px;
+            margin: 8px 0;
+        }
+        .markdown-content ol {
+            list-style-type: decimal;
+            padding-left: 20px;
+            margin: 8px 0;
+        }
+        .markdown-content li {
+            margin-bottom: 4px;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            font-weight: 800;
+            color: #0f172a;
+            margin-top: 14px;
+            margin-bottom: 6px;
+        }
+        .markdown-content h1 { font-size: 1.15rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+        .markdown-content h2 { font-size: 1.05rem; }
+        .markdown-content h3 { font-size: 0.95rem; }
+        .markdown-content strong {
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .markdown-content hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 14px 0;
+        }
+        .markdown-content blockquote {
+            border-left: 4px solid #38bdf8;
+            padding: 6px 12px;
+            background: #f0f9ff;
+            border-radius: 0 8px 8px 0;
+            margin: 8px 0;
+            font-style: italic;
+            color: #0369a1;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-b from-sky-50 via-slate-50 to-slate-100 text-slate-800 min-h-screen flex flex-col justify-between">
@@ -283,16 +357,16 @@ def root():
                     <div id="chatMessages" class="flex-1 overflow-y-auto pr-2 space-y-3.5">
                         <div class="flex items-start gap-3">
                             <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                            <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed">
-                                Hello! I am <strong>HEALIO</strong>, your clinical intelligence and public health companion. Ask me any medical query, drug question, or symptom concern.
+                            <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed markdown-content">
+                                Hello! I am <strong>HEALIO</strong>, your clinical intelligence and public health companion. Ask me any medical query, meal planning request, drug question, or symptom concern.
                             </div>
                         </div>
                     </div>
 
                     <!-- Quick Inquiries Chips -->
                     <div class="py-2.5 flex flex-wrap gap-2 border-t border-slate-100 mt-2">
+                        <button onclick="sendQuickPrompt('Provide a structured 1-day sample meal plan for low-glycemic nutrition with meal times, foods, and benefits.')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🥗 Low-GI Meal Plan</button>
                         <button onclick="sendQuickPrompt('What evidence-based lifestyle changes lower fasting blood glucose?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩸 Lower Blood Sugar</button>
-                        <button onclick="sendQuickPrompt('Provide a 1-day sample meal plan for low-glycemic nutrition.')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🥗 Low-GI Diet</button>
                         <button onclick="sendQuickPrompt('Can Paracetamol and Ibuprofen be taken together safely?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">💊 Paracetamol + Ibuprofen</button>
                         <button onclick="sendQuickPrompt('What key clinical questions should I prepare for my upcoming doctor visit?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩺 Questions for Doctor</button>
                     </div>
@@ -683,6 +757,17 @@ def root():
             modal.classList.toggle('hidden');
         }
 
+        function renderMarkdownToHTML(text) {
+            if (window.marked) {
+                try {
+                    return marked.parse(text);
+                } catch(e) {
+                    return text.replace(/\\n/g, '<br/>');
+                }
+            }
+            return text.replace(/\\n/g, '<br/>');
+        }
+
         async function sendMessage() {
             const input = document.getElementById('chatInput');
             const text = input.value.trim();
@@ -724,12 +809,13 @@ def root():
                     })
                 });
                 const data = await res.json();
-                const responseText = (data && data.response) ? data.response : "Thank you for sharing your concerns with HEALIO.";
+                const rawResponse = (data && data.response) ? data.response : "Thank you for sharing your concerns with HEALIO.";
+                const formattedHtml = renderMarkdownToHTML(rawResponse);
                 
                 chatMessages.innerHTML += `
                     <div class="flex items-start gap-3 justify-start">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                        <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed whitespace-pre-wrap">${responseText}</div>
+                        <div class="max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>
                     </div>`;
             } catch (e) {
                 chatMessages.innerHTML += `
@@ -922,6 +1008,16 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
         elif req.provider == "custom" and req.endpoint:
             endpoint = req.endpoint.strip()
 
+        system_prompt = (
+            f"You are HEALIO, a senior clinical intelligence and public health AI system. "
+            f"Provide original, plagiarism-free, highly structured and professional medical/health responses in {req.language}. "
+            f"Formatting rules:\n"
+            f"1. When answering requests involving schedules, meal plans, comparison matrices, or lab parameters, present them in clean Markdown tables.\n"
+            f"2. Use structured bullet points, clear bold takeaways, and concise paragraphs.\n"
+            f"3. Never output raw unformatted ASCII slashes or clutter.\n"
+            f"4. Conclude with a clear, 1-line professional medical disclaimer."
+        )
+
         try:
             res = requests.post(
                 endpoint,
@@ -929,10 +1025,7 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
                 json={
                     "model": model,
                     "messages": [
-                        {
-                            "role": "system",
-                            "content": f"You are HEALIO, a compassionate, highly empathetic clinical intelligence assistant. Respond fluently in {req.language}. Use structured bullet points, clear takeaways, and always conclude with a short medical disclaimer."
-                        },
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": req.message}
                     ]
                 },
@@ -951,20 +1044,23 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
                                 f"👉 *Tip: Open **'⚙️ Model & Key Settings'** in the top bar to select a working model (e.g. `llama-3.1-8b-instant` for Groq or `meta-llama/llama-3.3-70b-instruct:free` for OpenRouter).* \n\n"
                                 f"---\n\n"
                                 f"### 🩺 HEALIO Guidance on: \"{req.message}\"\n"
-                                f"- **Nutritional/Clinical Focus:** Prioritize low-glycemic foods rich in soluble fiber (lentils, vegetables, oats, whole legumes).\n"
-                                f"- **Hydration:** Aim for 2.5 - 3 liters of water daily to support metabolic clearance.\n"
-                                f"- **Monitoring:** Track fasting blood glucose at consistent times.\n\n"
+                                f"| Category | Clinical Recommendation | Rationale |\n"
+                                f"| :--- | :--- | :--- |\n"
+                                f"| **Nutritional Focus** | Low-glycemic complex carbohydrates (lentils, oats, chia seeds, vegetables) | Prevents acute glycemic spikes and sustains insulin sensitivity |\n"
+                                f"| **Hydration** | 2.5 to 3.0 Liters daily | Facilitates metabolic filtration and cellular homeostasis |\n"
+                                f"| **Monitoring** | Fasting blood glucose & postprandial tracking | Quantifies individual metabolic response to specific macronutrients |\n\n"
                                 f"**Disclaimer:** Consult your physician or registered dietitian before modifying any dietary or medication regimen."
                 }
         except Exception as e:
             return {"response": f"⚠️ Connection error: {str(e)}"}
 
     return {
-        "response": f"Thank you for sharing your concern: \"{req.message}\".\n\n"
-                    f"### 🩺 Clinical Recommendations\n"
-                    f"- **Hydration & Rest:** Maintain fluid intake and avoid strenuous activity while monitoring your body's response.\n"
-                    f"- **Symptom Diary:** Note the exact time of onset, triggers, and pain severity (1-10).\n"
-                    f"- **Clinical Consultation:** If symptoms persist over 24-48 hours or worsen, schedule an evaluation with your primary physician.\n\n"
+        "response": f"### 🩺 Clinical Recommendations for: \"{req.message}\"\n\n"
+                    f"| Domain | Recommended Action | Clinical Benefit |\n"
+                    f"| :--- | :--- | :--- |\n"
+                    f"| **Metabolic Health** | Prioritize fiber-dense whole foods (beans, leafy greens, whole oats) | Blunts glycemic index and optimizes glucose uptake |\n"
+                    f"| **Hydration & Rest** | Maintain adequate fluid intake and 7-8 hours sleep | Normalizes hormonal regulation of insulin and cortisol |\n"
+                    f"| **Clinical Follow-up** | Track symptom diary and schedule follow-up if persistent | Ensures evidence-based differential diagnosis |\n\n"
                     f"*(Tip: Click **'⚙️ Model & Key Settings'** to enter your Groq, OpenRouter, or OpenAI API key & choose your preferred model)*\n\n"
                     f"**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."
     }
