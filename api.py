@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import os
+import time
 import requests
 
 app = FastAPI(
@@ -30,13 +31,52 @@ GENERIC_BENCHMARKS = {
     "allegra": {"salt": "Fexofenadine Hydrochloride (120mg)", "branded": 210, "generic": 42, "savings": 80, "code": "PMBJP-00561", "category": "Allergy / Antihistamine"}
 }
 
+# Auto-Discovery Dynamic Fallback Pools
+GROQ_MODELS = [
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama3-8b-8192",
+    "llama3-70b-8192",
+    "deepseek-r1-distill-llama-70b",
+    "gemma2-9b-it",
+    "mixtral-8x7b-32768"
+]
+
+DEFAULT_OPENROUTER_FREE = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-chat:free",
+    "google/gemini-2.0-flash-exp:free",
+    "openrouter/free"
+]
+
+cached_discovered_free_models = []
+last_discovery_time = 0
+
+def get_dynamic_free_models() -> List[str]:
+    global cached_discovered_free_models, last_discovery_time
+    if cached_discovered_free_models and (time.time() - last_discovery_time < 3600):
+        return cached_discovered_free_models
+    try:
+        res = requests.get("https://openrouter.ai/api/v1/models", timeout=4)
+        if res.status_code == 200:
+            data = res.json().get("data", [])
+            live_free = [m["id"] for m in data if ":free" in m.get("id", "")]
+            combined = list(DEFAULT_OPENROUTER_FREE)
+            for m in live_free:
+                if m not in combined:
+                    combined.append(m)
+            cached_discovered_free_models = combined
+            last_discovery_time = time.time()
+            return cached_discovered_free_models
+    except Exception:
+        pass
+    return DEFAULT_OPENROUTER_FREE
+
 class ChatRequest(BaseModel):
     message: str
     language: Optional[str] = "English"
-    api_key: Optional[str] = ""
-    model: Optional[str] = ""
-    provider: Optional[str] = ""
-    endpoint: Optional[str] = ""
 
 class GenericRequest(BaseModel):
     drug_name: str
@@ -169,13 +209,10 @@ def root():
                     <span class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-sky-700 to-blue-600 bg-clip-text text-transparent">
                         HEALIO
                     </span>
-                    <span id="headerModelBadge" class="hidden sm:inline-block ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
-                        ⚡ Clinical Intelligence
-                    </span>
                 </div>
             </div>
 
-            <div class="flex items-center gap-2 sm:gap-4">
+            <div class="flex items-center gap-3">
                 <!-- Language Selector -->
                 <select id="langSelect" class="bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg px-2.5 py-1.5 border border-slate-200 outline-none cursor-pointer">
                     <option value="English">🌐 English</option>
@@ -189,117 +226,25 @@ def root():
                 </select>
 
                 <!-- Emergency Hotline Badge -->
-                <div class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
                     <span>🚨 108 / 911</span>
                 </div>
-
-                <!-- API Key & Custom Model Config Button -->
-                <button onclick="toggleSettingsModal()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5">
-                    <span>⚙️</span> Model & Key Settings
-                </button>
             </div>
         </div>
     </header>
 
-    <!-- Settings Modal Drawer -->
-    <div id="settingsModal" class="hidden bg-slate-900/40 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-4 transition">
-        <div class="max-w-2xl w-full bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-sky-100 space-y-5">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg">⚙️</div>
-                    <div>
-                        <h3 class="text-base font-extrabold text-slate-900">Universal LLM & API Configuration</h3>
-                        <p class="text-xs text-slate-500">Configure Groq, OpenRouter, OpenAI, or custom model parameters.</p>
-                    </div>
-                </div>
-                <button onclick="toggleSettingsModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm">✕</button>
-            </div>
-
-            <div class="space-y-4">
-                <!-- Provider Selector -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">1. AI Provider</label>
-                    <select id="providerSelect" onchange="onProviderChange()" class="w-full px-3.5 py-2.5 text-xs font-semibold rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white">
-                        <option value="auto">✨ Auto-Detect (based on API key prefix)</option>
-                        <option value="groq">⚡ Groq Cloud (Ultra Fast / Free Tier)</option>
-                        <option value="openrouter">🌐 OpenRouter (Meta, DeepSeek, Mistral, Google)</option>
-                        <option value="openai">🤖 OpenAI (GPT-4o, GPT-4o-mini)</option>
-                        <option value="custom">🛠️ Custom OpenAI-Compatible Base URL</option>
-                    </select>
-                </div>
-
-                <!-- API Key -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">2. API Key</label>
-                    <input id="customApiKey" type="password" oninput="autoDetectFromKey()" placeholder="Paste gsk_... / sk-or-... / sk-... API key" class="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
-                    <p class="text-[11px] text-slate-400 mt-1">Keys are stored securely in your browser's local storage and never shared.</p>
-                </div>
-
-                <!-- Model Preset Dropdown -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">3. Select Model Preset</label>
-                    <select id="modelPresetSelect" onchange="onPresetSelect()" class="w-full px-3.5 py-2.5 text-xs font-semibold rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white">
-                        <optgroup label="⚡ Groq High Speed">
-                            <option value="llama-3.1-8b-instant" selected>Groq: llama-3.1-8b-instant (Fastest / Recommended)</option>
-                            <option value="llama-3.3-70b-versatile">Groq: llama-3.3-70b-versatile (Powerful 70B)</option>
-                            <option value="llama3-8b-8192">Groq: llama3-8b-8192 (Standard 8B)</option>
-                            <option value="llama3-70b-8192">Groq: llama3-70b-8192 (Standard 70B)</option>
-                            <option value="deepseek-r1-distill-llama-70b">Groq: deepseek-r1-distill-llama-70b (Reasoning)</option>
-                            <option value="gemma2-9b-it">Groq: gemma2-9b-it (Google Gemma 2)</option>
-                            <option value="mixtral-8x7b-32768">Groq: mixtral-8x7b-32768 (Mixtral 8x7B)</option>
-                        </optgroup>
-                        <optgroup label="🌐 OpenRouter (Free & Premium)">
-                            <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: meta-llama/llama-3.3-70b-instruct:free</option>
-                            <option value="meta-llama/llama-3.1-8b-instruct:free">OpenRouter: meta-llama/llama-3.1-8b-instruct:free</option>
-                            <option value="deepseek/deepseek-r1:free">OpenRouter: deepseek/deepseek-r1:free</option>
-                            <option value="deepseek/deepseek-chat:free">OpenRouter: deepseek/deepseek-chat:free</option>
-                            <option value="google/gemini-2.0-flash-exp:free">OpenRouter: google/gemini-2.0-flash-exp:free</option>
-                            <option value="qwen/qwen-2.5-72b-instruct">OpenRouter: qwen/qwen-2.5-72b-instruct</option>
-                        </optgroup>
-                        <optgroup label="🤖 OpenAI">
-                            <option value="gpt-4o-mini">OpenAI: gpt-4o-mini (Fast & Intelligent)</option>
-                            <option value="gpt-4o">OpenAI: gpt-4o (Frontier Model)</option>
-                            <option value="gpt-3.5-turbo">OpenAI: gpt-3.5-turbo</option>
-                        </optgroup>
-                    </select>
-                </div>
-
-                <!-- Custom / Paste Any Model Input -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">4. Custom Model Identifier <span class="text-sky-600">(You can type or paste ANY model ID here)</span></label>
-                    <input id="customModelInput" type="text" value="llama-3.1-8b-instant" placeholder="e.g. llama-3.1-8b-instant, deepseek/deepseek-r1:free, gpt-4o-mini" class="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
-                </div>
-
-                <!-- Custom Endpoint URL (optional) -->
-                <div id="customEndpointGroup" class="hidden">
-                    <label class="text-xs font-bold text-slate-700 block mb-1">Custom Base URL (Optional)</label>
-                    <input id="customEndpointInput" type="text" placeholder="https://api.groq.com/openai/v1/chat/completions" class="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
-                </div>
-            </div>
-
-            <div class="flex items-center gap-3 pt-3 border-t border-slate-100">
-                <button onclick="saveApiKey()" class="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-md transition">
-                    💾 Save & Apply Settings
-                </button>
-                <button onclick="clearSettings()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
-                    Reset
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Hero Banner -->
+    <!-- Hero Banner (Option 1: Universal Clinical Intelligence) -->
     <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2 w-full">
         <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-700 p-6 sm:p-8 text-white shadow-xl shadow-sky-600/15">
-            <div class="max-w-3xl">
+            <div class="max-w-4xl">
                 <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-medium text-white mb-2.5 border border-white/20">
-                    ✨ Public Clinical Intelligence & Price Transparency Platform
+                    ✨ Universal Clinical Intelligence & Patient Rights Platform
                 </div>
-                <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight mb-2">
-                    80% Generic Drug Savings, Claim Appeals & Clinical Triage
+                <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight mb-2 leading-tight">
+                    Next-Generation Medical Intelligence, Drug Transparency & Patient Advocacy
                 </h1>
                 <p class="text-sky-100 text-xs sm:text-sm leading-relaxed">
-                    Identify identical generic medications, auto-draft legal health insurance dispute letters, analyze lab reports, and evaluate symptoms.
+                    Empowering patients and healthcare practitioners with real-time clinical triage, generic medication price parity, automated insurance dispute appeals, and biomarker lab analysis.
                 </p>
             </div>
         </div>
@@ -392,7 +337,7 @@ def root():
         <div id="tab-content-generic" class="tab-content hidden">
             <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
                 <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 mb-2">💰 Feature A: Public Price Transparency</div>
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 mb-2">💰 Public Price Transparency</div>
                     <h2 class="text-xl font-extrabold text-slate-900">Generic Bioequivalent Medicine & Price Saver</h2>
                     <p class="text-xs text-slate-500">Save 70% to 90% on branded prescriptions with Government Jan Aushadhi (PMBJP) & FDA AB-rated generic substitutes.</p>
                 </div>
@@ -434,7 +379,7 @@ def root():
         <div id="tab-content-insurance" class="tab-content hidden">
             <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
                 <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200 mb-2">📑 Feature B: Public Insurance Dispute Defense</div>
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200 mb-2">📑 Public Insurance Dispute Defense</div>
                     <h2 class="text-xl font-extrabold text-slate-900">Health Insurance Denial Decoder & Appeal Letter Generator</h2>
                     <p class="text-xs text-slate-500">Audit unfair hospital claim deductions, cite IRDAI Master Circular 2024 clauses, and generate a downloadable legal appeal PDF in 1 click.</p>
                 </div>
@@ -637,97 +582,6 @@ def root():
 
     <!-- Interactive Client Scripts -->
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedKey = localStorage.getItem('healio_api_key') || '';
-            const savedModel = localStorage.getItem('healio_custom_model') || 'llama-3.1-8b-instant';
-            const savedProvider = localStorage.getItem('healio_provider') || 'auto';
-            const savedEndpoint = localStorage.getItem('healio_endpoint') || '';
-
-            if (savedKey) document.getElementById('customApiKey').value = savedKey;
-            if (savedModel) {
-                document.getElementById('customModelInput').value = savedModel;
-                updateModelBadge(savedModel);
-            }
-            if (savedProvider) document.getElementById('providerSelect').value = savedProvider;
-            if (savedEndpoint) document.getElementById('customEndpointInput').value = savedEndpoint;
-
-            onProviderChange();
-        });
-
-        function autoDetectFromKey() {
-            const key = document.getElementById('customApiKey').value.trim();
-            const providerSelect = document.getElementById('providerSelect');
-            const customModel = document.getElementById('customModelInput');
-            const presetSelect = document.getElementById('modelPresetSelect');
-
-            if (providerSelect.value === 'auto') {
-                if (key.startsWith('gsk_')) {
-                    customModel.value = 'llama-3.1-8b-instant';
-                    presetSelect.value = 'llama-3.1-8b-instant';
-                } else if (key.startsWith('sk-or-')) {
-                    customModel.value = 'meta-llama/llama-3.3-70b-instruct:free';
-                    presetSelect.value = 'meta-llama/llama-3.3-70b-instruct:free';
-                } else if (key.startsWith('sk-')) {
-                    customModel.value = 'gpt-4o-mini';
-                    presetSelect.value = 'gpt-4o-mini';
-                }
-                updateModelBadge(customModel.value);
-            }
-        }
-
-        function onProviderChange() {
-            const p = document.getElementById('providerSelect').value;
-            const endpointGroup = document.getElementById('customEndpointGroup');
-            if (p === 'custom') {
-                endpointGroup.classList.remove('hidden');
-            } else {
-                endpointGroup.classList.add('hidden');
-            }
-        }
-
-        function onPresetSelect() {
-            const selected = document.getElementById('modelPresetSelect').value;
-            document.getElementById('customModelInput').value = selected;
-            updateModelBadge(selected);
-        }
-
-        function updateModelBadge(modelName) {
-            const badge = document.getElementById('headerModelBadge');
-            if (badge) badge.innerText = '⚡ ' + modelName;
-        }
-
-        function saveApiKey() {
-            const key = document.getElementById('customApiKey').value.trim();
-            const model = document.getElementById('customModelInput').value.trim() || 'llama-3.1-8b-instant';
-            const provider = document.getElementById('providerSelect').value;
-            const endpoint = document.getElementById('customEndpointInput').value.trim();
-
-            if (key) localStorage.setItem('healio_api_key', key);
-            else localStorage.removeItem('healio_api_key');
-
-            localStorage.setItem('healio_custom_model', model);
-            localStorage.setItem('healio_provider', provider);
-            if (endpoint) localStorage.setItem('healio_endpoint', endpoint);
-            else localStorage.removeItem('healio_endpoint');
-
-            updateModelBadge(model);
-            toggleSettingsModal();
-        }
-
-        function clearSettings() {
-            localStorage.removeItem('healio_api_key');
-            localStorage.removeItem('healio_custom_model');
-            localStorage.removeItem('healio_provider');
-            localStorage.removeItem('healio_endpoint');
-
-            document.getElementById('customApiKey').value = '';
-            document.getElementById('customModelInput').value = 'llama-3.1-8b-instant';
-            document.getElementById('modelPresetSelect').value = 'llama-3.1-8b-instant';
-            document.getElementById('providerSelect').value = 'auto';
-            document.getElementById('customEndpointInput').value = '';
-            updateModelBadge('llama-3.1-8b-instant');
-        }
-
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -739,11 +593,6 @@ def root():
             const activeBtn = document.getElementById('tab-btn-' + tabId);
             activeBtn.classList.remove('border-slate-200', 'bg-white/80');
             activeBtn.classList.add('border-sky-500', 'shadow-md', 'ring-2', 'ring-sky-500/20', 'bg-white');
-        }
-
-        function toggleSettingsModal() {
-            const modal = document.getElementById('settingsModal');
-            modal.classList.toggle('hidden');
         }
 
         function renderMarkdownToHTML(text) {
@@ -775,27 +624,13 @@ def root():
                 document.getElementById('breathingBox').classList.remove('hidden');
             }
 
-            const key = (document.getElementById('customApiKey').value || localStorage.getItem('healio_api_key') || '').trim();
-            const model = (document.getElementById('customModelInput').value || localStorage.getItem('healio_custom_model') || 'llama-3.1-8b-instant').trim();
-            const provider = (document.getElementById('providerSelect').value || localStorage.getItem('healio_provider') || 'auto');
-            const endpoint = (document.getElementById('customEndpointInput').value || localStorage.getItem('healio_endpoint') || '').trim();
             const lang = document.getElementById('langSelect').value;
 
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(key ? { 'Authorization': 'Bearer ' + key } : {})
-                    },
-                    body: JSON.stringify({ 
-                        message: text, 
-                        language: lang, 
-                        api_key: key, 
-                        model: model, 
-                        provider: provider,
-                        endpoint: endpoint
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, language: lang })
                 });
                 const data = await res.json();
                 const rawResponse = (data && data.response) ? data.response : "Thank you for sharing your concerns with HEALIO.";
@@ -976,27 +811,9 @@ def insurance_appeal(req: AppealRequest):
 @app.post("/api/chat")
 def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
     auth_header = authorization if isinstance(authorization, str) else ""
-    key = (req.api_key or (auth_header.replace("Bearer ", "").strip() if auth_header else "") or os.getenv("GROQ_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")).strip()
+    key = (os.getenv("GROQ_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "") or os.getenv("AI_API_KEY", "") or auth_header.replace("Bearer ", "").strip()).strip()
 
     if key:
-        endpoint = "https://api.groq.com/openai/v1/chat/completions" if key.startswith("gsk_") else "https://openrouter.ai/api/v1/chat/completions"
-        model = req.model.strip() if req.model and req.model.strip() else ("llama-3.1-8b-instant" if key.startswith("gsk_") else "meta-llama/llama-3.3-70b-instruct:free")
-
-        if req.provider == "groq" or key.startswith("gsk_"):
-            endpoint = "https://api.groq.com/openai/v1/chat/completions"
-            if not req.model:
-                model = "llama-3.1-8b-instant"
-        elif req.provider == "openrouter" or key.startswith("sk-or-"):
-            endpoint = "https://openrouter.ai/api/v1/chat/completions"
-            if not req.model:
-                model = "meta-llama/llama-3.3-70b-instruct:free"
-        elif req.provider == "openai" or (key.startswith("sk-") and not key.startswith("sk-or-")):
-            endpoint = "https://api.openai.com/v1/chat/completions"
-            if not req.model:
-                model = "gpt-4o-mini"
-        elif req.provider == "custom" and req.endpoint:
-            endpoint = req.endpoint.strip()
-
         system_prompt = (
             f"You are HEALIO, an advanced clinical intelligence and public health AI assistant. "
             f"Provide original, plagiarism-free, highly structured and professional medical/health responses in {req.language}. "
@@ -1007,41 +824,88 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
             f"4. Conclude with a clean 1-line professional medical disclaimer."
         )
 
-        try:
-            res = requests.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": req.message}
-                    ]
-                },
-                timeout=18
-            )
-            if res.status_code == 200:
-                data = res.json()
-                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                if content:
-                    return {"response": content}
-            else:
-                error_body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {"error": res.text[:200]}
-                err_msg = error_body.get("error", {}).get("message", str(error_body)) if isinstance(error_body, dict) else str(error_body)
-                return {
-                    "response": f"⚠️ **{endpoint.split('/')[2]} Error ({res.status_code}):** {err_msg}\n\n"
-                                f"👉 *Tip: Open **'⚙️ Model & Key Settings'** in the top bar to select a working model (e.g. `llama-3.1-8b-instant` for Groq or `meta-llama/llama-3.3-70b-instruct:free` for OpenRouter).*\n\n"
-                                f"### 🩺 HEALIO Clinical Summary for: \"{req.message}\"\n"
-                                f"| Category | Clinical Recommendation | Rationale |\n"
-                                f"| :--- | :--- | :--- |\n"
-                                f"| **Nutritional Focus** | Low-glycemic complex carbohydrates (lentils, oats, chia seeds, vegetables) | Prevents acute glycemic spikes and sustains insulin sensitivity |\n"
-                                f"| **Hydration** | 2.5 to 3.0 Liters daily | Facilitates metabolic filtration and cellular homeostasis |\n"
-                                f"| **Monitoring** | Fasting blood glucose & postprandial tracking | Quantifies individual metabolic response to specific macronutrients |\n\n"
-                                f"**Disclaimer:** Consult your physician or registered dietitian before modifying any dietary or medication regimen."
-                }
-        except Exception as e:
-            return {"response": f"⚠️ Connection error: {str(e)}"}
+        # Groq execution with automatic waterfall fallback
+        if key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
+            endpoint = "https://api.groq.com/openai/v1/chat/completions"
+            for model_id in GROQ_MODELS:
+                try:
+                    res = requests.post(
+                        endpoint,
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model_id,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": req.message}
+                            ]
+                        },
+                        timeout=12
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            return {"response": content}
+                except Exception:
+                    continue
 
+        # OpenRouter execution with dynamic discovery and fallback chain
+        elif key.startswith("sk-or-") or os.getenv("OPENROUTER_API_KEY"):
+            endpoint = "https://openrouter.ai/api/v1/chat/completions"
+            candidate_models = get_dynamic_free_models()
+            for model_id in candidate_models:
+                try:
+                    res = requests.post(
+                        endpoint,
+                        headers={
+                            "Authorization": f"Bearer {key}",
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": "https://healio.vercel.app",
+                            "X-Title": "HEALIO Clinical Intelligence"
+                        },
+                        json={
+                            "model": model_id,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": req.message}
+                            ]
+                        },
+                        timeout=14
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            return {"response": content}
+                except Exception:
+                    continue
+
+        # OpenAI standard execution
+        elif key.startswith("sk-") or os.getenv("OPENAI_API_KEY"):
+            endpoint = "https://api.openai.com/v1/chat/completions"
+            for model_id in ["gpt-4o-mini", "gpt-3.5-turbo"]:
+                try:
+                    res = requests.post(
+                        endpoint,
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model_id,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": req.message}
+                            ]
+                        },
+                        timeout=12
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            return {"response": content}
+                except Exception:
+                    continue
+
+    # Default structured fallback response
     return {
         "response": f"### 🩺 Clinical Recommendations for: \"{req.message}\"\n\n"
                     f"| Domain | Recommended Action | Clinical Benefit |\n"
@@ -1049,7 +913,6 @@ def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
                     f"| **Metabolic Health** | Prioritize fiber-dense whole foods (beans, leafy greens, whole oats) | Blunts glycemic index and optimizes glucose uptake |\n"
                     f"| **Hydration & Rest** | Maintain adequate fluid intake and 7-8 hours sleep | Normalizes hormonal regulation of insulin and cortisol |\n"
                     f"| **Clinical Follow-up** | Track symptom diary and schedule follow-up if persistent | Ensures evidence-based differential diagnosis |\n\n"
-                    f"*(Tip: Click **'⚙️ Model & Key Settings'** to enter your Groq, OpenRouter, or OpenAI API key & choose your preferred model)*\n\n"
                     f"**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."
     }
 
