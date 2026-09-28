@@ -1,13 +1,15 @@
-﻿from fastapi import FastAPI, Header, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import os
+import time
 import requests
+import re
 
 app = FastAPI(
-    title="HEALIO — Advanced Clinical Intelligence & Public Health Platform",
+    title="HEALIO · Advanced Clinical Intelligence & Public Health Platform",
     description="Universal clinical intelligence platform: Generic drug price savings, Insurance denial dispute letters, OpenFDA drug safety, and ESI Triage.",
     version="2.0.0"
 )
@@ -23,20 +25,73 @@ app.add_middleware(
 GENERIC_BENCHMARKS = {
     "augmentin": {"salt": "Amoxicillin (500mg) + Clavulanic Acid (125mg)", "branded": 230, "generic": 48, "savings": 79, "code": "PMBJP-00124", "category": "Antibiotic (Broad Spectrum)"},
     "pan-d": {"salt": "Pantoprazole (40mg) + Domperidone (30mg SR)", "branded": 195, "generic": 38, "savings": 81, "code": "PMBJP-00412", "category": "Gastroenterology / Antacid"},
+    "pantocid": {"salt": "Pantoprazole (40mg)", "branded": 160, "generic": 24, "savings": 85, "code": "PMBJP-00411", "category": "Gastroenterology / Antacid"},
     "telma": {"salt": "Telmisartan (40mg)", "branded": 140, "generic": 22, "savings": 84, "code": "PMBJP-00789", "category": "Cardiovascular / Blood Pressure"},
     "lipitor": {"salt": "Atorvastatin Calcium (20mg)", "branded": 185, "generic": 30, "savings": 84, "code": "PMBJP-00330", "category": "Cholesterol Lowering"},
     "atorva": {"salt": "Atorvastatin Calcium (10mg / 20mg)", "branded": 175, "generic": 28, "savings": 84, "code": "PMBJP-00330", "category": "Cholesterol Lowering"},
+    "rosuvas": {"salt": "Rosuvastatin Calcium (10mg)", "branded": 210, "generic": 34, "savings": 84, "code": "PMBJP-00335", "category": "Cholesterol Lowering"},
     "glycomet": {"salt": "Metformin Hydrochloride (500mg SR)", "branded": 65, "generic": 14, "savings": 78, "code": "PMBJP-00215", "category": "Diabetes Mellitus"},
-    "allegra": {"salt": "Fexofenadine Hydrochloride (120mg)", "branded": 210, "generic": 42, "savings": 80, "code": "PMBJP-00561", "category": "Allergy / Antihistamine"}
+    "allegra": {"salt": "Fexofenadine Hydrochloride (120mg)", "branded": 210, "generic": 42, "savings": 80, "code": "PMBJP-00561", "category": "Allergy / Antihistamine"},
+    "dolo": {"salt": "Paracetamol / Acetaminophen (650mg)", "branded": 35, "generic": 8, "savings": 77, "code": "PMBJP-00010", "category": "Analgesic / Antipyretic"},
+    "crocin": {"salt": "Paracetamol (500mg / 650mg)", "branded": 32, "generic": 7, "savings": 78, "code": "PMBJP-00009", "category": "Analgesic / Antipyretic"},
+    "calpol": {"salt": "Paracetamol (500mg / 650mg)", "branded": 30, "generic": 7, "savings": 77, "code": "PMBJP-00009", "category": "Analgesic / Antipyretic"},
+    "combiflam": {"salt": "Ibuprofen (400mg) + Paracetamol (325mg)", "branded": 48, "generic": 12, "savings": 75, "code": "PMBJP-00015", "category": "Pain / Inflammation"},
+    "azithral": {"salt": "Azithromycin (500mg)", "branded": 135, "generic": 32, "savings": 76, "code": "PMBJP-00118", "category": "Macrolide Antibiotic"},
+    "zithromax": {"salt": "Azithromycin (500mg)", "branded": 145, "generic": 32, "savings": 78, "code": "PMBJP-00118", "category": "Macrolide Antibiotic"},
+    "montek-lc": {"salt": "Montelukast (10mg) + Levocetirizine (5mg)", "branded": 190, "generic": 36, "savings": 81, "code": "PMBJP-00570", "category": "Anti-Asthmatic / Anti-Allergic"},
+    "ecosprin": {"salt": "Aspirin (75mg / 150mg Gastro-Resistant)", "branded": 25, "generic": 6, "savings": 76, "code": "PMBJP-00710", "category": "Antiplatelet / Cardiovascular"},
+    "januvia": {"salt": "Sitagliptin Phosphate (100mg)", "branded": 420, "generic": 68, "savings": 84, "code": "PMBJP-00230", "category": "DPP-4 Inhibitor / Diabetes"},
+    "forxiga": {"salt": "Dapagliflozin Propanediol (10mg)", "branded": 540, "generic": 78, "savings": 86, "code": "PMBJP-00245", "category": "SGLT2 Inhibitor / Diabetes"},
+    "voveran": {"salt": "Diclofenac Sodium (50mg / SR 75mg)", "branded": 95, "generic": 18, "savings": 81, "code": "PMBJP-00022", "category": "NSAID / Joint Pain"},
+    "metrogyl": {"salt": "Metronidazole (400mg)", "branded": 32, "generic": 8, "savings": 75, "code": "PMBJP-00130", "category": "Antiprotozoal / Antibacterial"}
 }
+
+# Auto-Discovery Dynamic Fallback Pools
+GROQ_MODELS = [
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama3-8b-8192",
+    "llama3-70b-8192",
+    "deepseek-r1-distill-llama-70b",
+    "gemma2-9b-it",
+    "mixtral-8x7b-32768"
+]
+
+DEFAULT_OPENROUTER_FREE = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-chat:free",
+    "google/gemini-2.0-flash-exp:free",
+    "openrouter/free"
+]
+
+cached_discovered_free_models = []
+last_discovery_time = 0
+
+def get_dynamic_free_models() -> List[str]:
+    global cached_discovered_free_models, last_discovery_time
+    if cached_discovered_free_models and (time.time() - last_discovery_time < 3600):
+        return cached_discovered_free_models
+    try:
+        res = requests.get("https://openrouter.ai/api/v1/models", timeout=4)
+        if res.status_code == 200:
+            data = res.json().get("data", [])
+            live_free = [m["id"] for m in data if ":free" in m.get("id", "")]
+            combined = list(DEFAULT_OPENROUTER_FREE)
+            for m in live_free:
+                if m not in combined:
+                    combined.append(m)
+            cached_discovered_free_models = combined
+            last_discovery_time = time.time()
+            return cached_discovered_free_models
+    except Exception:
+        pass
+    return DEFAULT_OPENROUTER_FREE
 
 class ChatRequest(BaseModel):
     message: str
     language: Optional[str] = "English"
-    api_key: Optional[str] = ""
-    model: Optional[str] = ""
-    provider: Optional[str] = ""
-    endpoint: Optional[str] = ""
 
 class GenericRequest(BaseModel):
     drug_name: str
@@ -53,6 +108,275 @@ class AppealRequest(BaseModel):
     denied_amount: str
     clinical_justification: str
 
+def generate_clinical_engine_response(message: str, language: str = "English") -> str:
+    msg = message.lower().strip()
+
+    # 1. EMERGENCY & RED FLAGS
+    if any(k in msg for k in ['chest pain', 'heart attack', 'cannot breathe', "can't breathe", 'difficulty breathing', 'shortness of breath', 'severe bleeding', 'unconscious', 'stroke', 'suicide', 'kill myself', 'want to die', 'overdose', 'poisoning', 'seizure', 'anaphylaxis', 'choking']):
+        return f"""### 🚨 EMERGENCY CLINICAL ALERT: IMMEDIATE ACTION REQUIRED
+
+HEALIO triage has identified symptoms consistent with an **acute medical emergency** for your query: *"{message}"*.
+
+| Protocol Level | Recommended Emergency Action | Immediate Execution |
+| :--- | :--- | :--- |
+| **1. Emergency Dispatch** | Activate Emergency Medical Services (EMS) immediately | 📞 **Dial 108 / 112 (India) or 911 (US/Canada)** |
+| **2. Patient Posture** | Position upright or in semi-Fowler's position; keep calm | ❌ Do NOT exert physical effort, walk, or climb stairs |
+| **3. Airway & Circulation** | Loosen all constricting clothing (collars, ties, belts) | Ensure continuous fresh airflow |
+| **4. Bystander Alert** | Inform a family member, colleague, or bystander | ❌ Do NOT drive alone to the hospital |
+
+**Emergency Red Flags:** Crushing retrosternal chest pain radiating to the left arm/jaw, sudden unilateral facial droop, slurred speech, or profound respiratory stridor.
+
+**Disclaimer:** This automated emergency protocol does not substitute for live paramedic intervention. Please contact emergency services immediately."""
+
+    # 2. BURNS & WOUND FIRST AID
+    if any(k in msg for k in ['burn', 'scald', 'burned', 'hot water']):
+        return f"""### 🩹 Clinical Management & First Aid Protocol: Burns
+
+| Phase | Immediate Clinical Action | What NOT To Do (Avoid Complications) |
+| :--- | :--- | :--- |
+| **1. Cool Water Flush** | Run cool (15–20°C / not ice-cold) tap water over the burn for 15–20 minutes | ❌ Never apply ice directly (induces tissue vasoconstriction & ischemia) |
+| **2. Clean & Protect** | Gently cover with a sterile, non-stick gauze dressing or clean plastic wrap | ❌ Do not apply butter, toothpaste, turmeric, or oil |
+| **3. Blister Integrity** | Keep intact skin clean and apply thin petroleum jelly (Vaseline) | ❌ Never pop or de-roof blisters (increases secondary infection risk) |
+| **4. Analgesia** | Consider paracetamol (500mg) or ibuprofen as per personal medical history | ❌ Do not apply topical antibiotics without prescription |
+
+**Emergency Red Flags (Seek Urgent Hospital Care):**
+- Burns larger than 3 inches in diameter, or affecting the face, hands, major joints, or genitalia.
+- Full-thickness (3rd-degree) burns with charred white, leathery, or painless skin.
+- Electrical or chemical burns.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 3. FEVER & TEMPERATURE
+    if any(k in msg for k in ['fever', 'temperature', 'pyrexia', 'high temp', 'chills']):
+        return f"""### 🩺 Clinical Evaluation & Management: Fever & Pyrexia
+
+**Inquiry Assessment:** *"{message}"*
+
+| Clinical Domain | Recommended Evidence-Based Action | Clinical Rationale |
+| :--- | :--- | :--- |
+| **Antipyretic Therapy** | Paracetamol / Acetaminophen (500mg–650mg every 6 hours as needed for adults) | Resets the hypothalamic thermoregulatory set-point |
+| **Fluid Replenishment** | 2.5 to 3.5 Liters daily (electrolytes, ORS, coconut water, broths) | Offsets insensible water loss and prevents hyperthermic dehydration |
+| **Physical Cooling** | Lukewarm sponge bath on forehead and axillary regions; light cotton clothing | Promotes evaporative heat dissipation without inducing shivering |
+| **Monitoring Protocol** | Record oral temperature every 4 to 6 hours in a symptom log | Establishes fever curve pattern (sustained vs intermittent vs remittent) |
+
+**When to Seek Immediate Medical Evaluation:**
+- Temperature exceeding 103°F (39.4°C) or fever lasting longer than 72 hours.
+- Accompanying stiff neck, severe photophobia, persistent vomiting, or petechial rash.
+- Any fever in infants under 3 months of age.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 4. HEADACHE & MIGRAINE
+    if any(k in msg for k in ['headache', 'migraine', 'head pain', 'head ache', 'throbbing head']):
+        return f"""### 🧠 Clinical Differential & Care Pathway: Cephalgia (Headache)
+
+**Inquiry Assessment:** *"{message}"*
+
+| Intervention Category | Clinical Recommendation | Mechanism of Relief |
+| :--- | :--- | :--- |
+| **Acute Analgesic** | Paracetamol (500-650mg) or NSAIDs (Ibuprofen/Naproxen) taken early with food | Inhibits peripheral prostaglandin synthesis |
+| **Environmental Control** | Rest in a dark, quiet, well-ventilated room | Minimizes photophobia, phonophobia, and sensory cortical overload |
+| **Hydration & Glycemia** | Drink 500ml water and consume a light low-glycemic snack | Reverses dehydration-induced meningeal traction & hypoglycemic headache |
+| **Cold / Warm Therapy** | Apply a cool gel pack to forehead or warm compress to posterior neck muscles | Modulates cranial blood flow and eases pericranial myofascial tension |
+
+**Critical Red Flags ("SNOOP" Criteria for Urgent Care):**
+- Sudden explosive "thunderclap" headache reaching maximum intensity within 60 seconds.
+- New headache accompanied by fever, neck stiffness, confusion, or focal weakness.
+- Headache triggered by coughing, straining, or postural change.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 5. HYPERTENSION & BLOOD PRESSURE
+    if any(k in msg for k in ['hypertension', 'blood pressure', 'high bp', 'bp reading', 'systolic', 'diastolic']):
+        return f"""### ❤️ Clinical Management Matrix: Blood Pressure & Cardiovascular Risk
+
+**Inquiry Assessment:** *"{message}"*
+
+| Parameter / Domain | Target / Recommendation | Clinical Rationale |
+| :--- | :--- | :--- |
+| **Optimal BP Targets** | Systolic < 120 mmHg and Diastolic < 80 mmHg (Stage 1: 130-139 / 80-89) | Minimizes long-term endothelial shear stress and cardiac afterload |
+| **Sodium Restriction** | Limit dietary sodium to < 1,500–2,000 mg/day (DASH Dietary Pattern) | Reduces intravascular fluid volume and peripheral vascular resistance |
+| **Potassium & Magnesium** | Potassium-rich foods (bananas, spinach, sweet potatoes, legumes) | Promotes natriuresis and enhances systemic vasodilation |
+| **Aerobic Activity** | 150 minutes/week moderate aerobic exercise (brisk walking, cycling) | Increases nitric oxide bioavailability and reduces arterial stiffness |
+| **Home Monitoring** | Measure seated after 5 mins rest; avoid caffeine/exercise 30 mins prior | Avoids "white-coat" hypertension artifacts |
+
+**Hypertensive Crisis Warning (Seek Emergency Care Immediately):**
+- BP reading > 180/120 mmHg accompanied by chest pain, shortness of breath, blurred vision, or neurological deficits.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 6. DIABETES & BLOOD SUGAR / GLUCOSE
+    if any(k in msg for k in ['diabetes', 'sugar', 'glucose', 'hba1c', 'diabetic', 'glycemic', 'insulin']):
+        return f"""### 🩸 Clinical Protocol & Glycemic Optimization: Diabetes Care
+
+**Inquiry Assessment:** *"{message}"*
+
+| Glycemic Metric | Clinical Target Range | Management Strategy |
+| :--- | :--- | :--- |
+| **Fasting Blood Sugar** | 70 – 100 mg/dL (Normal) | 80 – 130 mg/dL (Diabetic Target) | Balanced overnight hepatic gluconeogenesis |
+| **Postprandial (2hr)** | < 140 mg/dL (Normal) | < 180 mg/dL (Diabetic Target) | Complex carbohydrates with high dietary fiber and protein pairing |
+| **HbA1c Target** | < 5.7% (Normal) | < 7.0% (Established Diabetic Target) | Reflects 90-day mean erythrocyte glycation percentage |
+| **Dietary Pattern** | Low Glycemic Index (GI < 55), high soluble fiber, healthy fats | Blunts rapid post-meal insulin spikes and preserves beta-cell function |
+| **Physical Activity** | 30-45 mins daily brisk walking or resistance exercise | Enhances GLUT-4 receptor translocation and peripheral insulin sensitivity |
+
+**Diabetic Meal Structure Guidelines:**
+1. **Half Plate:** Non-starchy vegetables (spinach, cucumber, broccoli, bell peppers).
+2. **Quarter Plate:** Lean proteins (lentils, paneer, tofu, eggs, fish, chicken).
+3. **Quarter Plate:** Low-GI complex carbs (quinoa, brown rice, steel-cut oats, millets).
+
+**Hypoglycemia Warning:** If blood glucose drops < 70 mg/dL (shakiness, sweating, dizziness), apply the **Rule of 15**: consume 15g fast-acting carbohydrate (half cup juice / 3 glucose tablets) and recheck in 15 minutes.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 7. MEAL PLANS & DIET CHARTS
+    if any(k in msg for k in ['diet', 'meal plan', 'food chart', 'nutrition plan', 'breakfast', 'what to eat', 'weight loss', 'calorie', 'dinner', 'lunch']):
+        return f"""### 🥗 Evidence-Based Daily Nutrition & Meal Architecture
+
+**Inquiry Assessment:** *"{message}"*
+
+| Meal Time | Meal Components | Macronutrient & Clinical Rationale |
+| :--- | :--- | :--- |
+| **Morning (7:30 - 8:30 AM)** | Overnight oats or sprouted moong chilla + chia seeds + boiled eggs/tofu | High protein & soluble beta-glucan fiber to stabilize morning cortisol & glucose |
+| **Mid-Morning (11:00 AM)** | Handful of raw walnuts & almonds + green tea / warm lemon water | Rich in omega-3 fatty acids and polyphenols for cognitive focus |
+| **Lunch (1:00 - 2:00 PM)** | Mixed green salad + quinoa/brown rice/millets + dal/paneer/grilled chicken + sautéed vegetables | 50% fiber, 25% protein, 25% low-GI carbohydrate ratio to prevent post-lunch fatigue |
+| **Evening Snack (4:30 PM)** | Roasted chickpeas (chana) or vegetable sticks with hummus + tender coconut water | Slow-burning complex carbohydrates; natural electrolyte repletion |
+| **Dinner (7:30 - 8:30 PM)** | Light vegetable clear soup + baked/steamed protein (fish/paneer/lentil bowl) + steamed greens | High satiety with low glycemic burden; completed 2-3 hours prior to sleep |
+
+**Hydration & Micronutrient Target:** 2.5 to 3.0 Liters clean water daily. Supplement Vitamin D3 (if deficient) and ensure minimum 25-30g daily dietary fiber.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace personalized dietary consultations."""
+
+    # 8. COUGH, COLD, SORE THROAT, RESPIRATORY
+    if any(k in msg for k in ['cough', 'cold', 'sore throat', 'runny nose', 'congestion', 'flu', 'sinus', 'bronchitis', 'sneezing']):
+        return f"""### 🫁 Upper Respiratory Tract Assessment & Care Pathway
+
+**Inquiry Assessment:** *"{message}"*
+
+| Modality | Evidence-Based Recommendation | Clinical Purpose |
+| :--- | :--- | :--- |
+| **Hydration & Warm Fluids** | Warm ginger-honey water, herbal teas, and clear vegetable/chicken broths | Thins mucous secretions and soothes irritated pharyngeal mucosa |
+| **Warm Saline Gargles** | 1/2 tsp salt in warm water gargled 3-4 times daily | Reduces pharyngeal edema through osmotic fluid extraction |
+| **Steam Inhalation** | 10 minutes plain steam inhalation 2 times daily | Moisturizes dry tracheobronchial passages and relieves nasal congestion |
+| **Symptom Relief** | Honey (1-2 tsp before bed for adults) / OTC lozenges / Antihistamines if allergic | Suppresses cough reflex and provides physical demulcent coating |
+
+**Differentiating Viral vs Bacterial & When to See a Doctor:**
+- Most viral upper respiratory infections resolve within 7–10 days.
+- **Consult a physician if:** Fever > 101°F persists > 3 days, severe unilateral throat pain with white tonsillar exudates (Centor criteria), or difficulty swallowing/breathing.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 9. STOMACH, ACIDITY, GERD, DIGESTION
+    if any(k in msg for k in ['stomach', 'acidity', 'gerd', 'acid reflux', 'heartburn', 'gastric', 'constipation', 'diarrhea', 'vomiting', 'nausea', 'gas', 'bloating']):
+        return f"""### 🧪 Gastroenterology & Digestive Management Matrix
+
+**Inquiry Assessment:** *"{message}"*
+
+| Condition / Symptom | Evidence-Based Clinical Strategy | Mechanism & Action |
+| :--- | :--- | :--- |
+| **Acidity & Acid Reflux** | Low-fat non-citrus meals; avoid lying down for 3 hours after eating; elevate head of bed | Prevents transient lower esophageal sphincter (LES) relaxation and gastric acid regurgitation |
+| **Acute Diarrhea / Loose Stool** | Oral Rehydration Salts (ORS) solution + BRAT diet (Bananas, Rice, Applesauce, Toast) | Restores sodium-glucose cotransport in the intestinal lumen and prevents dehydration |
+| **Nausea / Vomiting** | Sip chilled ginger tea, lemon water, or electrolyte fluids in small 15ml increments | Calms gastric motility and modulates 5-HT3 receptors naturally |
+| **Constipation / Bloating** | 30g daily soluble fiber (psyllium husk/isabgol, oats) + 3L water + 20 mins brisk walk | Enhances stool bulk and stimulates colonic peristalsis |
+
+**Medication & Generic Equivalents (Consult Physician/Pharmacist):**
+- **Antacid / PPI:** Pantoprazole 40mg (*Jan Aushadhi PMBJP-00412* provides ~80% savings vs branded Pan-D).
+
+**Red Flags (Seek Medical Care):** Black tarry stools (melena), persistent vomiting > 24 hours, severe localized right lower quadrant pain, or signs of severe dehydration (sunken eyes, no urination).
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
+    # 10. DRUG INTERACTIONS & PHARMACOLOGY
+    if any(k in msg for k in ['paracetamol', 'ibuprofen', 'aspirin', 'metformin', 'telmisartan', 'amlodipine', 'atorvastatin', 'antibiotic', 'augmentin', 'pan-d', 'allegra', 'medicine', 'tablet', 'dosage', 'interaction', 'side effect', 'drug']):
+        return f"""### 💊 Pharmacology, Drug Safety & Generic Optimization
+
+**Inquiry Assessment:** *"{message}"*
+
+| Therapeutic Class | Mechanism of Action | Critical Safety / Interaction Warnings | Jan Aushadhi / FDA Generic Parity |
+| :--- | :--- | :--- | :--- |
+| **Analgesic / Antipyretic** (e.g. Paracetamol) | Central COX inhibition & thermoregulatory set-point modulation | Maximum 4,000mg/day in adults; avoid combining multiple paracetamol-containing cold formulations (hepatotoxicity risk) | Paracetamol 500mg/650mg is bioequivalent across all certified generic formulations |
+| **NSAIDs** (e.g. Ibuprofen, Naproxen) | Peripheral COX-1/COX-2 enzyme inhibition | Always take with food; avoid co-administration with other NSAIDs or blood thinners (GI bleeding risk) | Generic Ibuprofen 400mg provides 75% savings vs commercial brand names |
+| **Antacids / PPIs** (e.g. Pantoprazole) | Irreversible inhibition of gastric H+/K+ ATPase proton pump | Best taken 30-60 minutes before first meal of the day; long-term use requires monitoring B12 & Magnesium | PMBJP-00412 (*Pantoprazole 40mg*) provides 80%+ savings |
+
+**General Pharmacology Golden Rules:**
+1. Complete all prescribed courses of antibiotics to prevent antimicrobial resistance.
+2. Disclose all herbal supplements, OTC medications, and vitamins to your attending physician.
+
+**Disclaimer:** HEALIO provides evidence-based pharmaceutical analysis for informational purposes. Never modify your prescription without physician authorization."""
+
+    # 11. ANXIETY, PANIC, MENTAL HEALTH & SLEEP
+    if any(k in msg for k in ['anxiety', 'panic', 'stress', 'depressed', 'depression', 'sleep', 'insomnia', "can't sleep", 'overwhelmed', 'mental health']):
+        return f"""### 🧠 Neuro-Psychological Grounding & Sleep Hygiene Protocol
+
+**Inquiry Assessment:** *"{message}"*
+
+| Clinical Modality | Step-by-Step Technique | Neurophysiological Benefit |
+| :--- | :--- | :--- |
+| **1. 4-7-8 Breathing** | Inhale through nose for 4s, hold breath for 7s, exhale completely through mouth for 8s (repeat 4 cycles) | Activates vagus nerve and triggers parasympathetic rest-and-digest dominance |
+| **2. 5-4-3-2-1 Sensory Reset** | Identify: 5 things you see, 4 things you can touch, 3 sounds you hear, 2 things you smell, 1 thing you taste | Disrupts amygdala panic loops and re-engages the prefrontal cortex |
+| **3. Circadian Sleep Hygiene** | Dark room (18-20°C), zero screen exposure 60 mins before bed, fixed wake-up time 7 days/week | Normalizes endogenous melatonin secretion and REM sleep architecture |
+| **4. Cortisol Management** | 15-minute morning natural sunlight exposure + limit caffeine after 1:00 PM | Resets suprachiasmatic nucleus (SCN) circadian pacemaker |
+
+**Crisis Support Resources (Available 24/7):**
+- **India:** Tele-MANAS (📞 **14416** / **1800-891-4416**) | KIRAN Mental Health Helpline (📞 **1800-599-0019**)
+- **US / Canada:** National Crisis & Suicide Lifeline (📞 **988**)
+
+**Disclaimer:** HEALIO provides mental health self-regulation strategies. For persistent clinical symptoms, please consult a licensed psychiatrist or clinical psychologist."""
+
+    # 12. LAB TESTS & BIOMARKER INTERPRETATION
+    if any(k in msg for k in ['hba1c', 'cbc', 'lipid', 'cholesterol', 'triglycerides', 'creatinine', 'sgot', 'sgpt', 'tsh', 'thyroid', 'platelet', 'hemoglobin', 'wbc', 'lab test', 'blood test']):
+        return f"""### 🔬 Clinical Pathology & Diagnostic Biomarker Matrix
+
+**Inquiry Assessment:** *"{message}"*
+
+| Key Diagnostic Biomarker | Standard Reference Range | Clinical Significance of Abnormalities | Next Diagnostic Step |
+| :--- | :--- | :--- | :--- |
+| **HbA1c** (Glycated Hemoglobin) | < 5.7% (Normal) | 5.7–6.4% (Prediabetes) | ≥ 6.5% (Diabetes) | Quantifies 3-month mean glucose exposure | Correlate with Fasting Blood Sugar & Lipid Profile |
+| **Total Cholesterol / LDL** | Total < 200 mg/dL | LDL < 100 mg/dL | HDL > 40 (M) / 50 (F) mg/dL | Direct determinant of atherosclerotic cardiovascular risk (ASCVD) | Dietary lipid moderation + ASCVD risk score calculation |
+| **TSH** (Thyroid Stimulating Hormone) | 0.4 – 4.0 mIU/L | Elevated = Hypothyroidism | Suppressed = Hyperthyroidism | Free T3 and Free T4 panel confirmation |
+| **Serum Creatinine & eGFR** | Creatinine: 0.7 – 1.3 mg/dL | eGFR > 90 mL/min/1.73m² | Primary index of glomerular filtration and renal function | Urine routine for microalbuminuria |
+| **Hemoglobin & CBC** | 13.8–17.2 g/dL (M) | 12.1–15.1 g/dL (F) | Low = Anemia (Iron/B12 deficiency or chronic disease) | Peripheral blood smear & serum ferritin analysis |
+
+**Guidance:** Laboratory values must always be evaluated in conjunction with your specific clinical presentation, age, fasting state, and medical history.
+
+**Disclaimer:** HEALIO provides reference ranges and clinical interpretations for educational preparation. Only your licensed physician can provide formal diagnosis."""
+
+    # 13. GREETINGS & INTRODUCTIONS
+    if any(k in msg for k in ['hi', 'hello', 'hey', 'greetings', 'who are you', 'help me', 'good morning', 'good evening']):
+        return f"""### 👋 Welcome to HEALIO Clinical Intelligence
+
+I am **HEALIO**, an enterprise-grade Clinical Intelligence, Generic Price Saver, and Public Health platform.
+
+| Capability Module | Key Clinical & Regulatory Functions | How to Access |
+| :--- | :--- | :--- |
+| **🩺 Clinical Intelligence** | Evidence-based triage, symptom evaluation, dietary schedules, and lab test guidance | Type your medical question in the search/chat box |
+| **💊 Jan Aushadhi Generic Saver** | Find identical active molecules with 70% to 90% savings under PMBJP & FDA AB-rating | Click the **Generic Price Saver** tab |
+| **🛡️ Health Insurance Appeals** | Auto-generate formal dispute letters under IRDAI Master Circular (2024) | Click the **Insurance Appeals** tab |
+| **⚠️ Pharmacology Interaction Matrix** | Real-time multi-drug synergistic toxicity checks & contraindications | Click the **Drug Interactions** tab |
+| **🚨 Emergency Triage** | ESI Level 1–5 Emergency Severity Index classification | Click the **Clinical Triage** tab |
+
+**How can I assist your health and clinical inquiry today?**"""
+
+    # 14. DEFAULT SOPHISTICATED CLINICAL ANALYSIS FOR ANY OTHER QUERY
+    words = [w for w in re.findall(r'\b[a-zA-Z]{3,}\b', message) if w.lower() not in ['what', 'when', 'where', 'which', 'who', 'how', 'why', 'can', 'should', 'could', 'please', 'tell', 'about', 'the', 'and', 'for', 'with', 'does', 'have']]
+    focus_topic = " ".join(words[:4]).title() if words else message.strip().title()
+
+    return f"""### 🩺 Clinical Intelligence Assessment: {focus_topic}
+
+**Query Analysis:** *"{message}"*
+
+| Clinical Dimension | Evidence-Based Findings & Recommendations | Clinical Rationale |
+| :--- | :--- | :--- |
+| **1. Physiological Overview** | Comprehensive evaluation of symptoms and physiological mechanisms associated with {focus_topic.lower()} | Establishes biological context and potential differential considerations |
+| **2. Primary Management** | Focus on hydration (2.5L+ daily), restorative sleep (7-8 hours), and nutrient-dense whole foods | Promotes cellular homeostasis, reduces inflammatory biomarkers, and aids recovery |
+| **3. Symptom Monitoring** | Maintain a daily symptom tracking log noting onset, duration, triggers, and severity (1–10 scale) | Provides objective clinical data for your primary care physician |
+| **4. Lifestyle & Prevention** | Incorporate moderate daily activity, stress modulation, and avoidance of known environmental irritants | Enhances immune resilience and prevents symptom recurrence |
+
+**Key Takeaways & Next Steps:**
+- Monitor for any progression or development of acute symptoms (e.g. fever, sudden localized pain, shortness of breath).
+- If symptoms persist for more than 48–72 hours or cause significant discomfort, schedule an in-person evaluation with your healthcare provider.
+
+**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."""
+
 @app.get("/")
 def root():
     return HTMLResponse(content="""<!DOCTYPE html>
@@ -60,25 +384,34 @@ def root():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEALIO — Advanced Clinical Intelligence Platform</title>
+    <title>HEALIO · Advanced Clinical Intelligence Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        html, body, div, main, * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -ms-overflow-style: none !important;
+            scrollbar-width: none !important;
+        }
+        *::-webkit-scrollbar, html::-webkit-scrollbar, body::-webkit-scrollbar, div::-webkit-scrollbar {
+            display: none !important;
+            width: 0px !important;
+            height: 0px !important;
+        }
+
         @keyframes breathe {
             0%, 100% { transform: scale(0.8); background-color: #38bdf8; }
             50% { transform: scale(1.18); background-color: #0284c7; }
         }
         .animate-breathe { animation: breathe 8s infinite ease-in-out; }
 
-        /* Clean Markdown & Table Styling */
         .markdown-content table {
             width: 100%;
             border-collapse: collapse;
-            margin: 12px 0;
-            font-size: 0.8rem;
+            margin: 14px 0;
+            font-size: 0.85rem;
             background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -89,12 +422,12 @@ def root():
             background-color: #f0f9ff;
             color: #0369a1;
             font-weight: 700;
-            padding: 9px 12px;
+            padding: 10px 14px;
             border-bottom: 1px solid #cbd5e1;
             text-align: left;
         }
         .markdown-content td {
-            padding: 8px 12px;
+            padding: 9px 14px;
             border-bottom: 1px solid #f1f5f9;
             color: #334155;
             vertical-align: top;
@@ -131,11 +464,6 @@ def root():
             font-weight: 700;
             color: #0f172a;
         }
-        .markdown-content hr {
-            border: none;
-            border-top: 1px solid #e2e8f0;
-            margin: 14px 0;
-        }
         .markdown-content blockquote {
             border-left: 4px solid #38bdf8;
             padding: 6px 12px;
@@ -149,7 +477,6 @@ def root():
 </head>
 <body class="bg-gradient-to-b from-sky-50 via-slate-50 to-slate-100 text-slate-800 min-h-screen flex flex-col justify-between">
 
-    <!-- Top Navigation Bar -->
     <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-sky-100 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -160,14 +487,13 @@ def root():
                     <span class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-sky-700 to-blue-600 bg-clip-text text-transparent">
                         HEALIO
                     </span>
-                    <span id="headerModelBadge" class="hidden sm:inline-block ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                    <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
                         ⚡ Clinical Intelligence
                     </span>
                 </div>
             </div>
 
             <div class="flex items-center gap-2 sm:gap-4">
-                <!-- Language Selector -->
                 <select id="langSelect" class="bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg px-2.5 py-1.5 border border-slate-200 outline-none cursor-pointer">
                     <option value="English">🌐 English</option>
                     <option value="Hindi">हिन्दी (Hindi)</option>
@@ -179,566 +505,176 @@ def root():
                     <option value="German">Deutsch</option>
                 </select>
 
-                <!-- Emergency Hotline Badge -->
                 <div class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
                     <span>🚨 108 / 911</span>
                 </div>
 
-                <!-- API Key & Custom Model Config Button -->
-                <button onclick="toggleSettingsModal()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5">
-                    <span>⚙️</span> Model & Key Settings
-                </button>
+                <a href="#chatInput" onclick="document.getElementById('chatInput').focus()" class="text-xs bg-sky-600 hover:bg-sky-700 text-white font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5">
+                    <span>💬</span> Ask HEALIO
+                </a>
             </div>
         </div>
     </header>
 
-    <!-- Settings Modal Drawer -->
-    <div id="settingsModal" class="hidden bg-slate-900/40 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-4 transition">
-        <div class="max-w-2xl w-full bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-sky-100 space-y-5">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg">⚙️</div>
-                    <div>
-                        <h3 class="text-base font-extrabold text-slate-900">Universal LLM & API Configuration</h3>
-                        <p class="text-xs text-slate-500">Configure Groq, OpenRouter, OpenAI, or custom model parameters.</p>
-                    </div>
-                </div>
-                <button onclick="toggleSettingsModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm">✕</button>
-            </div>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex-1 space-y-6">
 
-            <div class="space-y-4">
-                <!-- Provider Selector -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">1. AI Provider</label>
-                    <select id="providerSelect" onchange="onProviderChange()" class="w-full px-3.5 py-2.5 text-xs font-semibold rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white">
-                        <option value="auto">✨ Auto-Detect (based on API key prefix)</option>
-                        <option value="groq">⚡ Groq Cloud (Ultra Fast / Free Tier)</option>
-                        <option value="openrouter">🌐 OpenRouter (Meta, DeepSeek, Mistral, Google)</option>
-                        <option value="openai">🤖 OpenAI (GPT-4o, GPT-4o-mini)</option>
-                        <option value="custom">🛠️ Custom OpenAI-Compatible Base URL</option>
-                    </select>
+        <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-700 via-sky-600 to-blue-600 p-6 sm:p-8 text-white shadow-xl shadow-sky-900/10">
+            <div class="relative z-10 max-w-3xl space-y-2">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-medium text-sky-100 border border-white/20">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    PMBJP Jan Aushadhi & FDA Parity Engine Active
                 </div>
-
-                <!-- API Key -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">2. API Key</label>
-                    <input id="customApiKey" type="password" oninput="autoDetectFromKey()" placeholder="Paste gsk_... / sk-or-... / sk-... API key" class="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
-                    <p class="text-[11px] text-slate-400 mt-1">Keys are stored securely in your browser's local storage and never shared.</p>
-                </div>
-
-                <!-- Model Preset Dropdown -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">3. Select Model Preset</label>
-                    <select id="modelPresetSelect" onchange="onPresetSelect()" class="w-full px-3.5 py-2.5 text-xs font-semibold rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none bg-white">
-                        <optgroup label="⚡ Groq High Speed">
-                            <option value="llama-3.1-8b-instant" selected>Groq: llama-3.1-8b-instant (Fastest / Recommended)</option>
-                            <option value="llama-3.3-70b-versatile">Groq: llama-3.3-70b-versatile (Powerful 70B)</option>
-                            <option value="llama3-8b-8192">Groq: llama3-8b-8192 (Standard 8B)</option>
-                            <option value="llama3-70b-8192">Groq: llama3-70b-8192 (Standard 70B)</option>
-                            <option value="deepseek-r1-distill-llama-70b">Groq: deepseek-r1-distill-llama-70b (Reasoning)</option>
-                            <option value="gemma2-9b-it">Groq: gemma2-9b-it (Google Gemma 2)</option>
-                            <option value="mixtral-8x7b-32768">Groq: mixtral-8x7b-32768 (Mixtral 8x7B)</option>
-                        </optgroup>
-                        <optgroup label="🌐 OpenRouter (Free & Premium)">
-                            <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: meta-llama/llama-3.3-70b-instruct:free</option>
-                            <option value="meta-llama/llama-3.1-8b-instruct:free">OpenRouter: meta-llama/llama-3.1-8b-instruct:free</option>
-                            <option value="deepseek/deepseek-r1:free">OpenRouter: deepseek/deepseek-r1:free</option>
-                            <option value="deepseek/deepseek-chat:free">OpenRouter: deepseek/deepseek-chat:free</option>
-                            <option value="google/gemini-2.0-flash-exp:free">OpenRouter: google/gemini-2.0-flash-exp:free</option>
-                            <option value="qwen/qwen-2.5-72b-instruct">OpenRouter: qwen/qwen-2.5-72b-instruct</option>
-                        </optgroup>
-                        <optgroup label="🤖 OpenAI">
-                            <option value="gpt-4o-mini">OpenAI: gpt-4o-mini (Fast & Intelligent)</option>
-                            <option value="gpt-4o">OpenAI: gpt-4o (Frontier Model)</option>
-                            <option value="gpt-3.5-turbo">OpenAI: gpt-3.5-turbo</option>
-                        </optgroup>
-                    </select>
-                </div>
-
-                <!-- Custom / Paste Any Model Input -->
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">4. Custom Model Identifier <span class="text-sky-600">(You can type or paste ANY model ID here)</span></label>
-                    <input id="customModelInput" type="text" value="llama-3.1-8b-instant" placeholder="e.g. llama-3.1-8b-instant, deepseek/deepseek-r1:free, gpt-4o-mini" class="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
-                </div>
-
-                <!-- Custom Endpoint URL (optional) -->
-                <div id="customEndpointGroup" class="hidden">
-                    <label class="text-xs font-bold text-slate-700 block mb-1">Custom Base URL (Optional)</label>
-                    <input id="customEndpointInput" type="text" placeholder="https://api.groq.com/openai/v1/chat/completions" class="w-full px-3.5 py-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 outline-none">
-                </div>
-            </div>
-
-            <div class="flex items-center gap-3 pt-3 border-t border-slate-100">
-                <button onclick="saveApiKey()" class="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-md transition">
-                    💾 Save & Apply Settings
-                </button>
-                <button onclick="clearSettings()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
-                    Reset
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Hero Banner -->
-    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-2 w-full">
-        <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-700 p-6 sm:p-8 text-white shadow-xl shadow-sky-600/15">
-            <div class="max-w-3xl">
-                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-medium text-white mb-2.5 border border-white/20">
-                    ✨ Public Clinical Intelligence & Price Transparency Platform
-                </div>
-                <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tight mb-2">
-                    80% Generic Drug Savings, Claim Appeals & Clinical Triage
+                <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                    Next-Generation Medical Intelligence, Drug Transparency & Patient Advocacy
                 </h1>
-                <p class="text-sky-100 text-xs sm:text-sm leading-relaxed">
-                    Identify identical generic medications, auto-draft legal health insurance dispute letters, analyze lab reports, and evaluate symptoms.
+                <p class="text-sky-100 text-sm sm:text-base leading-relaxed">
+                    AI-powered clinical guidance, instant generic drug savings, and dispute letter generation for denied claims under regulatory frameworks.
                 </p>
             </div>
         </div>
-    </section>
 
-    <!-- Interactive Navigation Tabs Grid -->
-    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 w-full">
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <button onclick="switchTab('chat')" id="tab-btn-chat" class="tab-btn p-3.5 rounded-2xl flex flex-col items-center text-center transition border bg-white border-sky-500 shadow-md ring-2 ring-sky-500/20">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center mb-1.5 shadow-sm text-lg">💬</div>
-                <span class="text-xs font-bold text-slate-800">AI Companion</span>
-                <span class="text-[10px] font-semibold text-slate-500">Voice & 4-7-8</span>
+        <!-- Dynamic Navigation Tabs -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+            <button onclick="switchTab('chat')" id="tab-btn-chat" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border-2 border-sky-500 bg-white font-bold text-xs sm:text-sm text-slate-800 shadow-md ring-2 ring-sky-500/20 transition">
+                <span>💬</span> Medical Companion
             </button>
-
-            <button onclick="switchTab('generic')" id="tab-btn-generic" class="tab-btn p-3.5 rounded-2xl flex flex-col items-center text-center transition border bg-white/80 border-slate-200 hover:bg-white">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center mb-1.5 shadow-sm text-lg">💰</div>
-                <span class="text-xs font-bold text-slate-800">Generic Saver</span>
-                <span class="text-[10px] font-semibold text-slate-500">Save 80%</span>
+            <button onclick="switchTab('generic')" id="tab-btn-generic" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+                <span>💊</span> Generic Price Saver
             </button>
-
-            <button onclick="switchTab('insurance')" id="tab-btn-insurance" class="tab-btn p-3.5 rounded-2xl flex flex-col items-center text-center transition border bg-white/80 border-slate-200 hover:bg-white">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center mb-1.5 shadow-sm text-lg">📑</div>
-                <span class="text-xs font-bold text-slate-800">Claim Appeal</span>
-                <span class="text-[10px] font-semibold text-slate-500">Legal PDF</span>
+            <button onclick="switchTab('appeal')" id="tab-btn-appeal" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+                <span>🛡️</span> Insurance Appeals
             </button>
-
-            <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="tab-btn p-3.5 rounded-2xl flex flex-col items-center text-center transition border bg-white/80 border-slate-200 hover:bg-white">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center mb-1.5 shadow-sm text-lg">🔬</div>
-                <span class="text-xs font-bold text-slate-800">Lab Vision</span>
-                <span class="text-[10px] font-semibold text-slate-500">Biomarkers</span>
+            <button onclick="switchTab('drug')" id="tab-btn-drug" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+                <span>⚠️</span> Drug Interactions
             </button>
-
-            <button onclick="switchTab('interactions')" id="tab-btn-interactions" class="tab-btn p-3.5 rounded-2xl flex flex-col items-center text-center transition border bg-white/80 border-slate-200 hover:bg-white">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-red-600 text-white flex items-center justify-center mb-1.5 shadow-sm text-lg">💊</div>
-                <span class="text-xs font-bold text-slate-800">Drug Safety</span>
-                <span class="text-[10px] font-semibold text-slate-500">OpenFDA</span>
-            </button>
-
-            <button onclick="switchTab('triage')" id="tab-btn-triage" class="tab-btn p-3.5 rounded-2xl flex flex-col items-center text-center transition border bg-white/80 border-slate-200 hover:bg-white">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 text-white flex items-center justify-center mb-1.5 shadow-sm text-lg">🩺</div>
-                <span class="text-xs font-bold text-slate-800">ESI Triage</span>
-                <span class="text-[10px] font-semibold text-slate-500">Levels 1-5</span>
+            <button onclick="switchTab('triage')" id="tab-btn-triage" class="tab-btn col-span-2 sm:col-span-1 flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+                <span>🚨</span> Clinical Triage
             </button>
         </div>
-    </section>
 
-    <!-- Main Tab Content Area -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 w-full flex-1">
-        
-        <!-- TAB 1: AI CLINICAL COMPANION (CHAT) -->
-        <div id="tab-content-chat" class="tab-content">
-            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div class="lg:col-span-3 bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col h-[640px]">
-                    
-                    <!-- 4-7-8 Breathing Circle -->
-                    <div id="breathingBox" class="hidden mb-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center relative">
-                        <button onclick="document.getElementById('breathingBox').classList.add('hidden')" class="absolute top-2 right-3 text-xs text-emerald-700 hover:text-emerald-900 font-bold">✕ Close</button>
-                        <h4 class="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">🧘 4-7-8 Calm Breathing Protocol</h4>
-                        <p class="text-xs text-emerald-700 mb-2">Inhale (4s) ➔ Hold (7s) ➔ Exhale slowly (8s)</p>
-                        <div class="w-16 h-16 rounded-full mx-auto bg-sky-500 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-sky-500/30 animate-breathe">Breathe</div>
-                    </div>
+        <!-- TAB 1: Chat / Search Engine Bar -->
+        <div id="tab-content-chat" class="tab-content space-y-4">
+            <div id="breathingBox" class="hidden bg-sky-50 border border-sky-200 rounded-2xl p-4 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-sky-400 animate-breathe flex items-center justify-center text-white text-xs font-bold shrink-0">Breathe</div>
+                <div>
+                    <h4 class="font-bold text-sky-900 text-sm">Panic or Anxiety Detected</h4>
+                    <p class="text-xs text-sky-700">Follow the circle: Inhale for 4s, hold for 7s, exhale slowly for 8s.</p>
+                </div>
+            </div>
 
-                    <!-- Chat Message Area -->
-                    <div id="chatMessages" class="flex-1 overflow-y-auto pr-2 space-y-3.5">
-                        <div class="flex items-start gap-3">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                            <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed markdown-content">
-                                Hello! I am <strong>HEALIO</strong>, your clinical intelligence and public health companion. Ask me any medical query, meal planning request, drug question, or symptom concern.
-                            </div>
+            <div class="bg-white rounded-3xl border border-sky-100 shadow-sm flex flex-col h-[520px] overflow-hidden">
+                <div id="chatMessages" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
+                        <div class="max-w-[92%] sm:max-w-[85%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm">
+                            👋 Hello! I am <strong>HEALIO</strong>, your clinical intelligence assistant. Ask me anything about symptoms, medications, lab tests, diet plans, or generic equivalents.
                         </div>
-                    </div>
-
-                    <!-- Quick Inquiries Chips -->
-                    <div class="py-2.5 flex flex-wrap gap-2 border-t border-slate-100 mt-2">
-                        <button onclick="sendQuickPrompt('Provide a structured 1-day sample meal plan for low-glycemic nutrition with meal times, foods, and benefits.')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🥗 Low-GI Meal Plan</button>
-                        <button onclick="sendQuickPrompt('What evidence-based lifestyle changes lower fasting blood glucose?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩸 Lower Blood Sugar</button>
-                        <button onclick="sendQuickPrompt('Can Paracetamol and Ibuprofen be taken together safely?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">💊 Paracetamol + Ibuprofen</button>
-                        <button onclick="sendQuickPrompt('What key clinical questions should I prepare for my upcoming doctor visit?')" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1 rounded-full font-medium transition">🩺 Questions for Doctor</button>
-                    </div>
-
-                    <!-- Chat Input -->
-                    <div class="pt-2 flex items-center gap-2">
-                        <button onclick="startVoiceRecognition()" id="micBtn" class="p-2.5 rounded-xl border bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200 transition" title="Voice Input">🎙️</button>
-                        <input id="chatInput" type="text" placeholder="Type or dictate your health question..." onkeydown="if(event.key==='Enter') sendMessage()" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-sky-500 outline-none">
-                        <button onclick="sendMessage()" class="p-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-md transition font-bold text-sm px-4">Send</button>
                     </div>
                 </div>
 
-                <!-- Sidebar Details -->
-                <div class="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-4">
-                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">🏥 Patient Information</h3>
-                    <div class="p-3.5 rounded-2xl bg-sky-50 border border-sky-100">
-                        <div class="text-xs font-semibold text-sky-900">Current AI Model</div>
-                        <div id="sidebarModelDisplay" class="text-sm font-bold text-sky-700 break-words">llama-3.1-8b-instant</div>
+                <div class="p-4 bg-slate-50/80 border-t border-slate-100">
+                    <div class="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-sky-500">
+                        <input id="chatInput" onkeydown="if(event.key==='Enter') sendMessage()" type="text" placeholder="Describe symptoms, ask about a medication, diet chart, or lab test..." class="flex-1 bg-transparent text-sm outline-none text-slate-800">
+                        <button onclick="startVoiceRecognition()" title="Voice Dictation" class="text-slate-400 hover:text-sky-600 p-1">🎤</button>
+                        <button onclick="sendMessage()" class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm">Send</button>
                     </div>
-                    <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-100">
-                        <div class="text-xs font-semibold text-amber-900">Emergency Red Flag</div>
-                        <div class="text-xs text-amber-800 mt-1">If experiencing chest tightness or sudden facial numbness, call <strong>108 / 911</strong> immediately.</div>
-                    </div>
-                    <div class="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-100">
-                        <div class="text-xs font-semibold text-emerald-900">100% Confidential</div>
-                        <div class="text-xs text-emerald-800 mt-1">Zero medical data is sold to commercial advertisers.</div>
+                    <div class="flex flex-wrap gap-2 mt-2.5">
+                        <span class="text-[11px] font-semibold text-slate-400">Quick prompts:</span>
+                        <button onclick="sendQuickPrompt('What are the clinical first-aid steps for a burn?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">🩹 Burn Care Protocol</button>
+                        <button onclick="sendQuickPrompt('Give me a low-glycemic diabetic daily meal plan')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">🥗 Diabetic Meal Plan</button>
+                        <button onclick="sendQuickPrompt('What is the difference between Dolo and Paracetamol generic?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">💊 Paracetamol / Dolo Savings</button>
+                        <button onclick="sendQuickPrompt('How do I manage high blood pressure naturally?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">❤️ Blood Pressure Tips</button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 2: GENERIC DRUG PRICE-SAVER -->
-        <div id="tab-content-generic" class="tab-content hidden">
-            <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
-                <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 mb-2">💰 Feature A: Public Price Transparency</div>
-                    <h2 class="text-xl font-extrabold text-slate-900">Generic Bioequivalent Medicine & Price Saver</h2>
-                    <p class="text-xs text-slate-500">Save 70% to 90% on branded prescriptions with Government Jan Aushadhi (PMBJP) & FDA AB-rated generic substitutes.</p>
-                </div>
+        <!-- TAB 2: Generic Price Saver -->
+        <div id="tab-content-generic" class="tab-content hidden bg-white rounded-3xl p-6 sm:p-8 border border-sky-100 shadow-sm space-y-6">
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-900">💊 Jan Aushadhi & FDA Generic Price Saver</h3>
+                <p class="text-xs text-slate-500">Find bioequivalent active pharmaceutical ingredients with 70% to 90% cost reduction.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <input id="genericSearchInput" type="text" placeholder="Enter branded drug (e.g., Augmentin, Dolo, Pan-D, Telma, Lipitor, Januvia)..." class="sm:col-span-3 px-4 py-3 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500">
+                <select id="currencySelect" class="px-4 py-3 text-sm rounded-xl border border-slate-200 outline-none bg-white font-semibold">
+                    <option value="INR (₹)">INR (₹)</option>
+                    <option value="USD ($)">USD ($)</option>
+                </select>
+            </div>
+            <button onclick="runGenericSaver()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+                🔍 Calculate Generic Savings
+            </button>
+            <div id="genericResultBox" class="hidden p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-900 leading-relaxed font-mono"></div>
+        </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div class="sm:col-span-2">
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Enter Branded Drug Name</label>
-                        <input id="genericSearchInput" type="text" value="Augmentin 625" placeholder="e.g., Augmentin 625, Pan-D, Telma 40, Lipitor 20mg, Glycomet" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Currency</label>
-                        <select id="currencySelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white">
-                            <option value="INR (₹)">INR (₹)</option>
-                            <option value="USD ($)">USD ($)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Popular Brand Chips -->
-                <div class="flex flex-wrap gap-2 items-center">
-                    <span class="text-xs font-bold text-slate-500">Try Popular:</span>
-                    <button onclick="setGenericSearch('Augmentin 625')" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Augmentin 625</button>
-                    <button onclick="setGenericSearch('Pan-D')" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Pan-D / Pantocid</button>
-                    <button onclick="setGenericSearch('Telma 40')" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Telma 40</button>
-                    <button onclick="setGenericSearch('Lipitor 20mg')" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Lipitor 20mg</button>
-                    <button onclick="setGenericSearch('Glycomet 500')" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Glycomet 500</button>
-                    <button onclick="setGenericSearch('Allegra 120mg')" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Allegra 120mg</button>
-                </div>
-
-                <button onclick="runGenericSaver()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition">
-                    🔍 Find Generic Equivalents & Calculate Price Savings
+        <!-- TAB 3: Insurance Appeals -->
+        <div id="tab-content-appeal" class="tab-content hidden bg-white rounded-3xl p-6 sm:p-8 border border-sky-100 shadow-sm space-y-6">
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-900">🛡️ Health Insurance Claim Dispute Generator</h3>
+                <p class="text-xs text-slate-500">Draft legally compliant dispute letters citing IRDAI Master Circular (2024) regulations.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Patient Name</label><input id="insPatientName" type="text" value="Sarvesh Kommawar" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Insurance Company / TPA</label><input id="insCompany" type="text" value="Star Health / MediAssist TPA" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Policy Number</label><input id="insPolicyNum" type="text" value="POL-9928102" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Claim ID</label><input id="insClaimId" type="text" value="CLM-771829" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Total Hospital Billed</label><input id="insTotalBilled" type="text" value="₹1,85,000" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Amount Denied / Deducted</label><input id="insDeniedAmount" type="text" value="₹48,500" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div class="sm:col-span-2"><label class="text-xs font-bold text-slate-600 block mb-1">Stated Reason for Denial</label><input id="insDenialReason" type="text" value="Non-medical expenses, consumable deductions, room rent capping" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="runInsuranceAppeal()" class="bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+                    📝 Generate Formal Appeal Notice
                 </button>
-
-                <div id="genericResultBox" class="hidden p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 text-sm text-slate-800 leading-relaxed shadow-sm whitespace-pre-wrap"></div>
-            </div>
-        </div>
-
-        <!-- TAB 3: INSURANCE CLAIM DENIAL APPEAL -->
-        <div id="tab-content-insurance" class="tab-content hidden">
-            <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
-                <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200 mb-2">📑 Feature B: Public Insurance Dispute Defense</div>
-                    <h2 class="text-xl font-extrabold text-slate-900">Health Insurance Denial Decoder & Appeal Letter Generator</h2>
-                    <p class="text-xs text-slate-500">Audit unfair hospital claim deductions, cite IRDAI Master Circular 2024 clauses, and generate a downloadable legal appeal PDF in 1 click.</p>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Policyholder Name</label>
-                        <input id="insPatientName" type="text" value="Rajesh Kumar" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Insurance Company / TPA</label>
-                        <input id="insCompany" type="text" value="Star Health / Medi Assist TPA" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Policy Number</label>
-                        <input id="insPolicyNum" type="text" value="POL-982341-2024" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Claim Reference ID</label>
-                        <input id="insClaimId" type="text" value="CLM-784512" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Total Hospital Bill</label>
-                        <input id="insTotalBilled" type="text" value="₹1,85,000" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Denied / Disallowed Amount</label>
-                        <input id="insDeniedAmount" type="text" value="₹62,400" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500">
-                    </div>
-                </div>
-
-                <div>
-                    <label class="text-xs font-bold text-slate-700 block mb-1">Stated Denial Reason / Rejection Clause</label>
-                    <select id="insDenialReason" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none focus:ring-2 focus:ring-amber-500 bg-white">
-                        <option value="Non-payable consumable & medical equipment deductions (Gloves, Syringes, Admin)">Non-payable consumable & equipment deductions (Gloves, Syringes, Admin)</option>
-                        <option value="Pre-existing disease (PED) 36/48-month waiting period exclusion">Pre-existing disease (PED) waiting period exclusion</option>
-                        <option value="Hospitalization not medically necessary / Investigation only">Hospitalization not medically necessary / Investigation only</option>
-                        <option value="Proportionate room rent capping deduction">Proportionate room rent capping deduction</option>
-                        <option value="Lack of pre-authorization in emergency admission">Lack of pre-authorization in emergency admission</option>
-                    </select>
-                </div>
-
-                <button onclick="runInsuranceAppeal()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl shadow-md transition">
-                    ⚖️ Decode Denial & Draft Official Legal Appeal Notice
+                <button onclick="downloadAppealPdf()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
+                    📄 Download Legal PDF
                 </button>
-
-                <div id="appealResultBox" class="hidden space-y-3">
-                    <div id="appealText" class="p-5 rounded-2xl bg-amber-50/60 border border-amber-200 text-sm text-slate-800 leading-relaxed shadow-sm whitespace-pre-wrap"></div>
-                    <button onclick="downloadAppealPdf()" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-2">
-                        📥 Download Official Printable Legal Appeal PDF
-                    </button>
-                </div>
             </div>
+            <div id="appealResultBox" class="hidden p-5 rounded-2xl bg-slate-50 border border-slate-200 font-mono text-xs whitespace-pre-wrap leading-relaxed"><code id="appealText"></code></div>
         </div>
 
-        <!-- TAB 4: LAB REPORT SCANNER -->
-        <div id="tab-content-scanner" class="tab-content hidden">
-            <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
-                <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-200 mb-2">🔬 Multi-Modal Vision OCR</div>
-                    <h2 class="text-xl font-extrabold text-slate-900">Lab Report & Prescription Vision Scanner</h2>
-                    <p class="text-xs text-slate-500">Extracts clinical parameters with color-coded biomarker progress gauges.</p>
-                </div>
-
-                <div class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-3xl p-8 text-center transition cursor-pointer bg-slate-50/50">
-                    <div class="text-3xl mb-2">📸</div>
-                    <p class="text-sm font-bold text-slate-800">Upload Blood Panel or Prescription Photo</p>
-                    <p class="text-xs text-slate-500 mt-1">Supports JPG, PNG, WEBP, and PDF documents</p>
-                </div>
-
-                <!-- Visual Biomarker Ranges -->
-                <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider">🧪 Sample Extracted Biomarker Gauge Ranges</h4>
-                    <div class="space-y-3">
-                        <div class="bg-white p-3 rounded-xl border border-slate-200">
-                            <div class="flex justify-between items-center text-xs font-bold mb-1">
-                                <span>Fasting Blood Glucose</span>
-                                <span class="px-2 py-0.5 rounded text-[10px] bg-rose-100 text-rose-800">142 mg/dL (High)</span>
-                            </div>
-                            <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-rose-500" style="width: 85%"></div></div>
-                            <div class="text-[10px] text-slate-400 mt-1">Reference: 70 - 99 mg/dL</div>
-                        </div>
-
-                        <div class="bg-white p-3 rounded-xl border border-slate-200">
-                            <div class="flex justify-between items-center text-xs font-bold mb-1">
-                                <span>HbA1c (Glycated Hemoglobin)</span>
-                                <span class="px-2 py-0.5 rounded text-[10px] bg-rose-100 text-rose-800">7.4 % (Elevated)</span>
-                            </div>
-                            <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-rose-500" style="width: 78%"></div></div>
-                            <div class="text-[10px] text-slate-400 mt-1">Reference: 4.0 - 5.6 %</div>
-                        </div>
-
-                        <div class="bg-white p-3 rounded-xl border border-slate-200">
-                            <div class="flex justify-between items-center text-xs font-bold mb-1">
-                                <span>Total Cholesterol</span>
-                                <span class="px-2 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800">218 mg/dL (Borderline)</span>
-                            </div>
-                            <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: 65%"></div></div>
-                            <div class="text-[10px] text-slate-400 mt-1">Reference: &lt; 200 mg/dL</div>
-                        </div>
-
-                        <div class="bg-white p-3 rounded-xl border border-slate-200">
-                            <div class="flex justify-between items-center text-xs font-bold mb-1">
-                                <span>Serum Creatinine</span>
-                                <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800">0.9 mg/dL (Normal)</span>
-                            </div>
-                            <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500" style="width: 45%"></div></div>
-                            <div class="text-[10px] text-slate-400 mt-1">Reference: 0.7 - 1.3 mg/dL</div>
-                        </div>
-                    </div>
-                </div>
+        <!-- TAB 4: Drug Interactions -->
+        <div id="tab-content-drug" class="tab-content hidden bg-white rounded-3xl p-6 sm:p-8 border border-sky-100 shadow-sm space-y-6">
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-900">⚠️ Pharmacology Synergistic Toxicity Matrix</h3>
+                <p class="text-xs text-slate-500">Multi-drug pharmacokinetic interaction checks and contraindications.</p>
             </div>
+            <input id="drugsInput" type="text" value="Aspirin + Ibuprofen + Warfarin" class="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500">
+            <button onclick="runDrugCheck()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+                ⚡ Evaluate Interactions
+            </button>
+            <div id="drugResultBox" class="hidden p-5 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-900 font-mono whitespace-pre-wrap leading-relaxed"></div>
         </div>
 
-        <!-- TAB 5: OPENFDA DRUG INTERACTIONS -->
-        <div id="tab-content-interactions" class="tab-content hidden">
-            <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
-                <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-bold border border-rose-200 mb-2">💊 OpenFDA Safety Engine</div>
-                    <h2 class="text-xl font-extrabold text-slate-900">Drug Interactions & Medication Safety Matrix</h2>
-                    <p class="text-xs text-slate-500">Check pharmacokinetic contraindications, food restrictions, and administration intervals.</p>
-                </div>
-
-                <div class="space-y-3">
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Enter Medications (comma-separated)</label>
-                        <input id="drugsInput" type="text" value="Aspirin, Ibuprofen" placeholder="e.g., Aspirin, Ibuprofen, Lisinopril" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-rose-500 outline-none">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">Patient Conditions (Optional)</label>
-                        <input id="patientConditions" type="text" value="Hypertension, Peptic Ulcer" placeholder="e.g., Hypertension, Kidney Disease" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-rose-500 outline-none">
-                    </div>
-                </div>
-
-                <button onclick="runDrugCheck()" class="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl shadow-md transition">
-                    🔬 Check Drug Interactions & Food Warnings
-                </button>
-
-                <div id="drugResultBox" class="hidden p-5 rounded-2xl bg-rose-50/60 border border-rose-200 text-sm text-slate-800 leading-relaxed shadow-sm whitespace-pre-wrap"></div>
+        <!-- TAB 5: Clinical Triage -->
+        <div id="tab-content-triage" class="tab-content hidden bg-white rounded-3xl p-6 sm:p-8 border border-sky-100 shadow-sm space-y-6">
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-900">🚨 Emergency Severity Index (ESI) Triage</h3>
+                <p class="text-xs text-slate-500">Clinical acuity assessment based on standardized emergency department scoring.</p>
             </div>
-        </div>
-
-        <!-- TAB 6: ESI CLINICAL TRIAGE -->
-        <div id="tab-content-triage" class="tab-content hidden">
-            <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-5">
-                <div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-50 text-cyan-700 text-xs font-bold border border-cyan-200 mb-2">🩺 Emergency Severity Index</div>
-                    <h2 class="text-xl font-extrabold text-slate-900">Multi-Step Guided Symptom Checker & Triage</h2>
-                    <p class="text-xs text-slate-500">Evaluates clinical acuity levels (ESI Level 1 Resuscitation to ESI Level 5 Non-Urgent).</p>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">1. Anatomical Region</label>
-                        <select id="triageBodyPart" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none bg-white">
-                            <option value="Head & Neurological">Head & Neurological</option>
-                            <option value="Chest & Cardiovascular" selected>Chest & Cardiovascular</option>
-                            <option value="Abdomen & Digestive">Abdomen & Digestive</option>
-                            <option value="Musculoskeletal & Joints">Musculoskeletal & Joints</option>
-                            <option value="Throat & Respiratory">Throat & Respiratory</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">2. Primary Symptom</label>
-                        <input id="triagePrimarySymptom" type="text" value="Sudden squeezing chest pain radiating to left shoulder" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">3. Pain Scale (1 to 10): <span id="painValue">7</span></label>
-                        <input id="triagePainSlider" type="range" min="1" max="10" value="7" oninput="document.getElementById('painValue').innerText=this.value" class="w-full accent-cyan-600">
-                    </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-700 block mb-1">4. Onset & Duration</label>
-                        <select id="triageDuration" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs outline-none bg-white">
-                            <option value="Sudden onset (< 2 hours)" selected>Sudden onset (&lt; 2 hours)</option>
-                            <option value="Developing over 2-12 hours">Developing over 2-12 hours</option>
-                            <option value="1 to 3 days">1 to 3 days</option>
-                            <option value="Chronic (> 1 month)">Chronic (&gt; 1 month)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <button onclick="runTriage()" class="w-full py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-sm rounded-xl shadow-md transition">
-                    🚨 Run Clinical ESI Triage Assessment
-                </button>
-
-                <div id="triageResultBox" class="hidden p-5 rounded-2xl bg-cyan-50/60 border border-cyan-200 text-sm text-slate-800 leading-relaxed shadow-sm whitespace-pre-wrap"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Body Region</label><select id="triageBodyPart" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-white font-medium"><option>Chest / Cardiac</option><option>Abdomen / Gastrointestinal</option><option>Head / Neurological</option><option>Musculoskeletal / Trauma</option></select></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Primary Complaint</label><input id="triagePrimarySymptom" type="text" value="Sudden squeezing chest pain radiating to left shoulder" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Pain Severity (1-10)</label><input id="triagePainSlider" type="range" min="1" max="10" value="8" class="w-full accent-rose-600"></div>
+                <div><label class="text-xs font-bold text-slate-600 block mb-1">Duration</label><input id="triageDuration" type="text" value="45 minutes" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
             </div>
+            <button onclick="runTriage()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+                🚨 Compute ESI Acuity Score
+            </button>
+            <div id="triageResultBox" class="hidden p-5 rounded-2xl bg-rose-50 border border-rose-200 text-sm text-rose-900 font-mono whitespace-pre-wrap leading-relaxed"></div>
         </div>
 
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-white border-t border-slate-200 py-6 mt-8">
-        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 space-y-1">
-            <p class="font-bold text-slate-700">🏥 HEALIO — Enterprise Clinical Intelligence & Public Health Platform</p>
-            <p class="text-[11px] text-slate-400">Medical Disclaimer: HEALIO provides evidence-based guidance, generic price transparency, and dispute preparation for educational purposes. Always consult a licensed medical professional for emergency diagnoses.</p>
+    <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4">
+            <p class="font-bold text-slate-700">HEALIO · Advanced Clinical Intelligence & Patient Advocacy</p>
+            <p class="mt-1">Designed & Engineered by <strong>Sarvesh Kommawar</strong> · AI & Data Analyst</p>
         </div>
     </footer>
 
-    <!-- Interactive Client Scripts -->
     <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedKey = localStorage.getItem('healio_api_key') || '';
-            const savedModel = localStorage.getItem('healio_custom_model') || 'llama-3.1-8b-instant';
-            const savedProvider = localStorage.getItem('healio_provider') || 'auto';
-            const savedEndpoint = localStorage.getItem('healio_endpoint') || '';
-
-            if (savedKey) document.getElementById('customApiKey').value = savedKey;
-            if (savedModel) {
-                document.getElementById('customModelInput').value = savedModel;
-                updateModelBadge(savedModel);
-            }
-            if (savedProvider) document.getElementById('providerSelect').value = savedProvider;
-            if (savedEndpoint) document.getElementById('customEndpointInput').value = savedEndpoint;
-
-            onProviderChange();
-        });
-
-        function autoDetectFromKey() {
-            const key = document.getElementById('customApiKey').value.trim();
-            const providerSelect = document.getElementById('providerSelect');
-            const customModel = document.getElementById('customModelInput');
-            const presetSelect = document.getElementById('modelPresetSelect');
-
-            if (providerSelect.value === 'auto') {
-                if (key.startsWith('gsk_')) {
-                    customModel.value = 'llama-3.1-8b-instant';
-                    presetSelect.value = 'llama-3.1-8b-instant';
-                } else if (key.startsWith('sk-or-')) {
-                    customModel.value = 'meta-llama/llama-3.3-70b-instruct:free';
-                    presetSelect.value = 'meta-llama/llama-3.3-70b-instruct:free';
-                } else if (key.startsWith('sk-')) {
-                    customModel.value = 'gpt-4o-mini';
-                    presetSelect.value = 'gpt-4o-mini';
-                }
-                updateModelBadge(customModel.value);
-            }
-        }
-
-        function onProviderChange() {
-            const p = document.getElementById('providerSelect').value;
-            const endpointGroup = document.getElementById('customEndpointGroup');
-            if (p === 'custom') {
-                endpointGroup.classList.remove('hidden');
-            } else {
-                endpointGroup.classList.add('hidden');
-            }
-        }
-
-        function onPresetSelect() {
-            const selected = document.getElementById('modelPresetSelect').value;
-            document.getElementById('customModelInput').value = selected;
-            updateModelBadge(selected);
-        }
-
-        function updateModelBadge(modelName) {
-            const badge = document.getElementById('headerModelBadge');
-            const sidebar = document.getElementById('sidebarModelDisplay');
-            if (badge) badge.innerText = '⚡ ' + modelName;
-            if (sidebar) sidebar.innerText = modelName;
-        }
-
-        function saveApiKey() {
-            const key = document.getElementById('customApiKey').value.trim();
-            const model = document.getElementById('customModelInput').value.trim() || 'llama-3.1-8b-instant';
-            const provider = document.getElementById('providerSelect').value;
-            const endpoint = document.getElementById('customEndpointInput').value.trim();
-
-            if (key) localStorage.setItem('healio_api_key', key);
-            else localStorage.removeItem('healio_api_key');
-
-            localStorage.setItem('healio_custom_model', model);
-            localStorage.setItem('healio_provider', provider);
-            if (endpoint) localStorage.setItem('healio_endpoint', endpoint);
-            else localStorage.removeItem('healio_endpoint');
-
-            updateModelBadge(model);
-            toggleSettingsModal();
-        }
-
-        function clearSettings() {
-            localStorage.removeItem('healio_api_key');
-            localStorage.removeItem('healio_custom_model');
-            localStorage.removeItem('healio_provider');
-            localStorage.removeItem('healio_endpoint');
-
-            document.getElementById('customApiKey').value = '';
-            document.getElementById('customModelInput').value = 'llama-3.1-8b-instant';
-            document.getElementById('modelPresetSelect').value = 'llama-3.1-8b-instant';
-            document.getElementById('providerSelect').value = 'auto';
-            document.getElementById('customEndpointInput').value = '';
-            updateModelBadge('llama-3.1-8b-instant');
-        }
-
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -748,13 +684,10 @@ def root():
 
             document.getElementById('tab-content-' + tabId).classList.remove('hidden');
             const activeBtn = document.getElementById('tab-btn-' + tabId);
-            activeBtn.classList.remove('border-slate-200', 'bg-white/80');
-            activeBtn.classList.add('border-sky-500', 'shadow-md', 'ring-2', 'ring-sky-500/20', 'bg-white');
-        }
-
-        function toggleSettingsModal() {
-            const modal = document.getElementById('settingsModal');
-            modal.classList.toggle('hidden');
+            if (activeBtn) {
+                activeBtn.classList.remove('border-slate-200', 'bg-white/80');
+                activeBtn.classList.add('border-sky-500', 'shadow-md', 'ring-2', 'ring-sky-500/20', 'bg-white');
+            }
         }
 
         function renderMarkdownToHTML(text) {
@@ -762,10 +695,10 @@ def root():
                 try {
                     return marked.parse(text);
                 } catch(e) {
-                    return text.replace(/\\n/g, '<br/>');
+                    return text.replace(/\n/g, '<br/>');
                 }
             }
-            return text.replace(/\\n/g, '<br/>');
+            return text.replace(/\n/g, '<br/>');
         }
 
         async function sendMessage() {
@@ -786,27 +719,13 @@ def root():
                 document.getElementById('breathingBox').classList.remove('hidden');
             }
 
-            const key = (document.getElementById('customApiKey').value || localStorage.getItem('healio_api_key') || '').trim();
-            const model = (document.getElementById('customModelInput').value || localStorage.getItem('healio_custom_model') || 'llama-3.1-8b-instant').trim();
-            const provider = (document.getElementById('providerSelect').value || localStorage.getItem('healio_provider') || 'auto');
-            const endpoint = (document.getElementById('customEndpointInput').value || localStorage.getItem('healio_endpoint') || '').trim();
             const lang = document.getElementById('langSelect').value;
 
             try {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(key ? { 'Authorization': 'Bearer ' + key } : {})
-                    },
-                    body: JSON.stringify({ 
-                        message: text, 
-                        language: lang, 
-                        api_key: key, 
-                        model: model,
-                        provider: provider,
-                        endpoint: endpoint
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, language: lang })
                 });
                 const data = await res.json();
                 const rawResponse = (data && data.response) ? data.response : "Thank you for sharing your concerns with HEALIO.";
@@ -815,14 +734,14 @@ def root():
                 chatMessages.innerHTML += `
                     <div class="flex items-start gap-3 justify-start">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                        <div class="max-w-[90%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>
+                        <div class="max-w-[92%] sm:max-w-[88%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>
                     </div>`;
             } catch (e) {
                 chatMessages.innerHTML += `
                     <div class="flex items-start gap-3 justify-start">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
                         <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200">
-                            Thank you for your inquiry: "${text}". HEALIO advises maintaining standard hydration, monitoring symptom progression, and consulting your primary physician.
+                            Thank you for your inquiry: "${text}". HEALIO advises maintaining hydration, tracking symptoms, and consulting your primary physician.
                         </div>
                     </div>`;
             }
@@ -846,11 +765,6 @@ def root():
                 sendMessage();
             };
             rec.start();
-        }
-
-        function setGenericSearch(name) {
-            document.getElementById('genericSearchInput').value = name;
-            runGenericSaver();
         }
 
         async function runGenericSaver() {
@@ -932,9 +846,9 @@ def root():
             const box = document.getElementById('drugResultBox');
             box.classList.remove('hidden');
             box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\n` +
-                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID Interaction)\n` +
-                `- Mechanism: Co-administration severely increases gastrointestinal bleeding and ulcer risk.\n` +
-                `- Clinical Advice: Do not take together without direct physician supervision.`;
+                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID & Antiplatelet Interaction)\n` +
+                `- Mechanism: Co-administration significantly increases gastrointestinal bleeding and ulceration risks.\n` +
+                `- Clinical Advice: Do not combine without direct physician authorization.`;
         }
 
         function runTriage() {
@@ -959,7 +873,7 @@ def root():
 def generic_saver(req: GenericRequest):
     clean = req.drug_name.lower().strip()
     for key, data in GENERIC_BENCHMARKS.items():
-        if key in clean:
+        if key in clean or clean in key:
             return {
                 "drug": req.drug_name,
                 "salt": data["salt"],
@@ -971,7 +885,10 @@ def generic_saver(req: GenericRequest):
     return {
         "drug": req.drug_name,
         "salt": "Identical active pharmaceutical molecule",
+        "branded_price": "Market Average",
+        "generic_price": "PMBJP Subsidized",
         "savings": "70% to 85% Savings vs Commercial Brand",
+        "jan_aushadhi_code": "PMBJP-GENERIC",
         "guidance": "Ask pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated generic version."
     }
 
@@ -987,83 +904,103 @@ def insurance_appeal(req: AppealRequest):
 @app.post("/api/chat")
 def chat(req: ChatRequest, authorization: Optional[str] = Header(None)):
     auth_header = authorization if isinstance(authorization, str) else ""
-    key = (req.api_key or (auth_header.replace("Bearer ", "").strip() if auth_header else "") or os.getenv("GROQ_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")).strip()
+    key = (os.getenv("GROQ_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "") or os.getenv("AI_API_KEY", "") or auth_header.replace("Bearer ", "").strip()).strip()
 
     if key:
-        endpoint = "https://api.groq.com/openai/v1/chat/completions" if key.startswith("gsk_") else "https://openrouter.ai/api/v1/chat/completions"
-        model = req.model.strip() if req.model and req.model.strip() else ("llama-3.1-8b-instant" if key.startswith("gsk_") else "meta-llama/llama-3.3-70b-instruct:free")
-
-        if req.provider == "groq" or key.startswith("gsk_"):
-            endpoint = "https://api.groq.com/openai/v1/chat/completions"
-            if not req.model:
-                model = "llama-3.1-8b-instant"
-        elif req.provider == "openrouter" or key.startswith("sk-or-"):
-            endpoint = "https://openrouter.ai/api/v1/chat/completions"
-            if not req.model:
-                model = "meta-llama/llama-3.3-70b-instruct:free"
-        elif req.provider == "openai" or (key.startswith("sk-") and not key.startswith("sk-or-")):
-            endpoint = "https://api.openai.com/v1/chat/completions"
-            if not req.model:
-                model = "gpt-4o-mini"
-        elif req.provider == "custom" and req.endpoint:
-            endpoint = req.endpoint.strip()
-
         system_prompt = (
-            f"You are HEALIO, a senior clinical intelligence and public health AI system. "
+            f"You are HEALIO, an advanced clinical intelligence and public health AI assistant. "
             f"Provide original, plagiarism-free, highly structured and professional medical/health responses in {req.language}. "
-            f"Formatting rules:\n"
+            f"Formatting guidelines:\n"
             f"1. When answering requests involving schedules, meal plans, comparison matrices, or lab parameters, present them in clean Markdown tables.\n"
             f"2. Use structured bullet points, clear bold takeaways, and concise paragraphs.\n"
-            f"3. Never output raw unformatted ASCII slashes or clutter.\n"
-            f"4. Conclude with a clear, 1-line professional medical disclaimer."
+            f"3. Never output raw separator lines (---) or ASCII clutter.\n"
+            f"4. Conclude with a clean 1-line professional medical disclaimer."
         )
 
-        try:
-            res = requests.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": req.message}
-                    ]
-                },
-                timeout=18
-            )
-            if res.status_code == 200:
-                data = res.json()
-                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                if content:
-                    return {"response": content}
-            else:
-                error_body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {"error": res.text[:200]}
-                err_msg = error_body.get("error", {}).get("message", str(error_body)) if isinstance(error_body, dict) else str(error_body)
-                return {
-                    "response": f"⚠️ **{endpoint.split('/')[2]} Error ({res.status_code}):** {err_msg}\n\n"
-                                f"👉 *Tip: Open **'⚙️ Model & Key Settings'** in the top bar to select a working model (e.g. `llama-3.1-8b-instant` for Groq or `meta-llama/llama-3.3-70b-instruct:free` for OpenRouter).* \n\n"
-                                f"---\n\n"
-                                f"### 🩺 HEALIO Guidance on: \"{req.message}\"\n"
-                                f"| Category | Clinical Recommendation | Rationale |\n"
-                                f"| :--- | :--- | :--- |\n"
-                                f"| **Nutritional Focus** | Low-glycemic complex carbohydrates (lentils, oats, chia seeds, vegetables) | Prevents acute glycemic spikes and sustains insulin sensitivity |\n"
-                                f"| **Hydration** | 2.5 to 3.0 Liters daily | Facilitates metabolic filtration and cellular homeostasis |\n"
-                                f"| **Monitoring** | Fasting blood glucose & postprandial tracking | Quantifies individual metabolic response to specific macronutrients |\n\n"
-                                f"**Disclaimer:** Consult your physician or registered dietitian before modifying any dietary or medication regimen."
-                }
-        except Exception as e:
-            return {"response": f"⚠️ Connection error: {str(e)}"}
+        # Groq execution with automatic waterfall fallback
+        if key.startswith("gsk_") or os.getenv("GROQ_API_KEY"):
+            endpoint = "https://api.groq.com/openai/v1/chat/completions"
+            for model_id in GROQ_MODELS:
+                try:
+                    res = requests.post(
+                        endpoint,
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model_id,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": req.message}
+                            ]
+                        },
+                        timeout=12
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            return {"response": content}
+                except Exception:
+                    continue
 
-    return {
-        "response": f"### 🩺 Clinical Recommendations for: \"{req.message}\"\n\n"
-                    f"| Domain | Recommended Action | Clinical Benefit |\n"
-                    f"| :--- | :--- | :--- |\n"
-                    f"| **Metabolic Health** | Prioritize fiber-dense whole foods (beans, leafy greens, whole oats) | Blunts glycemic index and optimizes glucose uptake |\n"
-                    f"| **Hydration & Rest** | Maintain adequate fluid intake and 7-8 hours sleep | Normalizes hormonal regulation of insulin and cortisol |\n"
-                    f"| **Clinical Follow-up** | Track symptom diary and schedule follow-up if persistent | Ensures evidence-based differential diagnosis |\n\n"
-                    f"*(Tip: Click **'⚙️ Model & Key Settings'** to enter your Groq, OpenRouter, or OpenAI API key & choose your preferred model)*\n\n"
-                    f"**Disclaimer:** HEALIO provides evidence-based guidance for educational preparation and does not replace emergency clinical care."
-    }
+        # OpenRouter execution with dynamic discovery and fallback chain
+        elif key.startswith("sk-or-") or os.getenv("OPENROUTER_API_KEY"):
+            endpoint = "https://openrouter.ai/api/v1/chat/completions"
+            candidate_models = get_dynamic_free_models()
+            for model_id in candidate_models:
+                try:
+                    res = requests.post(
+                        endpoint,
+                        headers={
+                            "Authorization": f"Bearer {key}",
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": "https://healio.vercel.app",
+                            "X-Title": "HEALIO Clinical Intelligence"
+                        },
+                        json={
+                            "model": model_id,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": req.message}
+                            ]
+                        },
+                        timeout=14
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            return {"response": content}
+                except Exception:
+                    continue
+
+        # OpenAI standard execution
+        elif key.startswith("sk-") or os.getenv("OPENAI_API_KEY"):
+            endpoint = "https://api.openai.com/v1/chat/completions"
+            for model_id in ["gpt-4o-mini", "gpt-3.5-turbo"]:
+                try:
+                    res = requests.post(
+                        endpoint,
+                        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                        json={
+                            "model": model_id,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": req.message}
+                            ]
+                        },
+                        timeout=12
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                            return {"response": content}
+                except Exception:
+                    continue
+
+    # Dynamic intelligent clinical fallback response
+    generated_response = generate_clinical_engine_response(req.message, req.language or "English")
+    return {"response": generated_response}
 
 if __name__ == "__main__":
     import uvicorn
