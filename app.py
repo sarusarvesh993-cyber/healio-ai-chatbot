@@ -379,7 +379,13 @@ I am **HEALIO**, an enterprise-grade Clinical Intelligence, Generic Price Saver,
 
 @app.get("/")
 def root():
-    return HTMLResponse(content="""<!DOCTYPE html>
+    return HTMLResponse(
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        },
+        content="""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -573,11 +579,13 @@ def root():
                 </div>
 
                 <div class="p-4 bg-slate-50/80 border-t border-slate-100">
-                    <div class="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-sky-500">
-                        <input id="chatInput" onkeydown="if(event.key==='Enter') sendMessage()" type="text" placeholder="Describe symptoms, ask about a medication, diet chart, or lab test..." class="flex-1 bg-transparent text-sm outline-none text-slate-800">
-                        <button onclick="startVoiceRecognition()" title="Voice Dictation" class="text-slate-400 hover:text-sky-600 p-1">🎤</button>
-                        <button onclick="sendMessage()" class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm">Send</button>
-                    </div>
+                    <form id="chatForm" onsubmit="event.preventDefault(); sendMessage();" class="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-sky-500">
+                        <input id="chatInput" type="text" autocomplete="off" placeholder="Describe symptoms, ask about a medication, diet chart, or lab test..." class="flex-1 bg-transparent text-sm outline-none text-slate-800">
+                        <button type="button" onclick="startVoiceRecognition()" title="Voice Dictation" class="text-slate-400 hover:text-sky-600 p-1">🎤</button>
+                        <button id="sendBtn" type="submit" class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm flex items-center gap-1 cursor-pointer">
+                            <span id="sendBtnText">Send</span>
+                        </button>
+                    </form>
                     <div class="flex flex-wrap gap-2 mt-2.5">
                         <span class="text-[11px] font-semibold text-slate-400">Quick prompts:</span>
                         <button onclick="sendQuickPrompt('What are the clinical first-aid steps for a burn?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">🩹 Burn Care Protocol</button>
@@ -703,23 +711,32 @@ def root():
 
         async function sendMessage() {
             const input = document.getElementById('chatInput');
-            const text = input.value.trim();
+            const sendBtn = document.getElementById('sendBtn');
+            const sendBtnText = document.getElementById('sendBtnText');
+            const text = input ? input.value.trim() : '';
             if (!text) return;
 
             const chatMessages = document.getElementById('chatMessages');
-            chatMessages.innerHTML += `
-                <div class="flex items-start gap-3 justify-end">
-                    <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-sky-600 text-white rounded-tr-none shadow-sm">${text}</div>
-                </div>`;
+            
+            // Add user message bubble immediately
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `<div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-sky-600 text-white rounded-tr-none shadow-sm">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+            chatMessages.appendChild(userDiv);
+            
             input.value = '';
+            if (sendBtn) sendBtn.disabled = true;
+            if (sendBtnText) sendBtnText.innerText = 'Thinking...';
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
             const isAnxiety = /panic|panicking|scared|anxious|anxiety|overwhelmed|heart racing/i.test(text);
             if (isAnxiety) {
-                document.getElementById('breathingBox').classList.remove('hidden');
+                const bBox = document.getElementById('breathingBox');
+                if (bBox) bBox.classList.remove('hidden');
             }
 
-            const lang = document.getElementById('langSelect').value;
+            const langSelect = document.getElementById('langSelect');
+            const lang = langSelect ? langSelect.value : 'English';
 
             try {
                 const res = await fetch('/api/chat', {
@@ -728,24 +745,30 @@ def root():
                     body: JSON.stringify({ message: text, language: lang })
                 });
                 const data = await res.json();
-                const rawResponse = (data && data.response) ? data.response : "Thank you for sharing your concerns with HEALIO.";
+                const rawResponse = (data && data.response) ? data.response : "Thank you for sharing your inquiry with HEALIO.";
                 const formattedHtml = renderMarkdownToHTML(rawResponse);
                 
-                chatMessages.innerHTML += `
-                    <div class="flex items-start gap-3 justify-start">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                        <div class="max-w-[92%] sm:max-w-[88%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>
-                    </div>`;
+                const botDiv = document.createElement('div');
+                botDiv.className = 'flex items-start gap-3 justify-start';
+                botDiv.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold shadow-sm">H</div>
+                    <div class="max-w-[92%] sm:max-w-[88%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>`;
+                chatMessages.appendChild(botDiv);
             } catch (e) {
-                chatMessages.innerHTML += `
-                    <div class="flex items-start gap-3 justify-start">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold">H</div>
-                        <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200">
-                            Thank you for your inquiry: "${text}". HEALIO advises maintaining hydration, tracking symptoms, and consulting your primary physician.
-                        </div>
+                const botDiv = document.createElement('div');
+                botDiv.className = 'flex items-start gap-3 justify-start';
+                botDiv.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-blue-500 flex items-center justify-center text-white shrink-0 text-xs font-bold shadow-sm">H</div>
+                    <div class="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed">
+                        Thank you for your inquiry: "${text}". HEALIO advises maintaining adequate hydration, tracking symptoms, and consulting your primary physician.
                     </div>`;
+                chatMessages.appendChild(botDiv);
+            } finally {
+                if (sendBtn) sendBtn.disabled = false;
+                if (sendBtnText) sendBtnText.innerText = 'Send';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                if (input) input.focus();
             }
-            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         function sendQuickPrompt(prompt) {
