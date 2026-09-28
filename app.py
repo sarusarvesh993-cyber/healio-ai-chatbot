@@ -541,19 +541,19 @@ def root():
 
         <!-- Dynamic Navigation Tabs -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
-            <button onclick="switchTab('chat')" id="tab-btn-chat" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border-2 border-sky-500 bg-white font-bold text-xs sm:text-sm text-slate-800 shadow-md ring-2 ring-sky-500/20 transition">
+            <button id="tab-btn-chat" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border-2 border-sky-500 bg-white font-bold text-xs sm:text-sm text-slate-800 shadow-md ring-2 ring-sky-500/20 transition cursor-pointer">
                 <span>💬</span> Medical Companion
             </button>
-            <button onclick="switchTab('generic')" id="tab-btn-generic" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+            <button id="tab-btn-generic" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition cursor-pointer">
                 <span>💊</span> Generic Price Saver
             </button>
-            <button onclick="switchTab('appeal')" id="tab-btn-appeal" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+            <button id="tab-btn-appeal" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition cursor-pointer">
                 <span>🛡️</span> Insurance Appeals
             </button>
-            <button onclick="switchTab('drug')" id="tab-btn-drug" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+            <button id="tab-btn-drug" class="tab-btn flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition cursor-pointer">
                 <span>⚠️</span> Drug Interactions
             </button>
-            <button onclick="switchTab('triage')" id="tab-btn-triage" class="tab-btn col-span-2 sm:col-span-1 flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition">
+            <button id="tab-btn-triage" class="tab-btn col-span-2 sm:col-span-1 flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-slate-200 bg-white/80 font-bold text-xs sm:text-sm text-slate-700 hover:bg-white transition cursor-pointer">
                 <span>🚨</span> Clinical Triage
             </button>
         </div>
@@ -579,19 +579,19 @@ def root():
                 </div>
 
                 <div class="p-4 bg-slate-50/80 border-t border-slate-100">
-                    <form id="chatForm" onsubmit="event.preventDefault(); sendMessage();" class="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-sky-500">
+                    <form id="chatForm" class="flex items-center gap-2 bg-white rounded-2xl px-4 py-2 border border-slate-200 shadow-sm focus-within:ring-2 focus-within:ring-sky-500">
                         <input id="chatInput" type="text" autocomplete="off" placeholder="Describe symptoms, ask about a medication, diet chart, or lab test..." class="flex-1 bg-transparent text-sm outline-none text-slate-800">
-                        <button type="button" onclick="startVoiceRecognition()" title="Voice Dictation" class="text-slate-400 hover:text-sky-600 p-1">🎤</button>
+                        <button type="button" onclick="startVoiceRecognition()" title="Voice Dictation" class="text-slate-400 hover:text-sky-600 p-1 cursor-pointer">🎤</button>
                         <button id="sendBtn" type="submit" class="bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm flex items-center gap-1 cursor-pointer">
                             <span id="sendBtnText">Send</span>
                         </button>
                     </form>
                     <div class="flex flex-wrap gap-2 mt-2.5">
                         <span class="text-[11px] font-semibold text-slate-400">Quick prompts:</span>
-                        <button onclick="sendQuickPrompt('What are the clinical first-aid steps for a burn?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">🩹 Burn Care Protocol</button>
-                        <button onclick="sendQuickPrompt('Give me a low-glycemic diabetic daily meal plan')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">🥗 Diabetic Meal Plan</button>
-                        <button onclick="sendQuickPrompt('What is the difference between Dolo and Paracetamol generic?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">💊 Paracetamol / Dolo Savings</button>
-                        <button onclick="sendQuickPrompt('How do I manage high blood pressure naturally?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition">❤️ Blood Pressure Tips</button>
+                        <button onclick="sendQuickPrompt('What are the clinical first-aid steps for a burn?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition cursor-pointer">🩹 Burn Care Protocol</button>
+                        <button onclick="sendQuickPrompt('Give me a low-glycemic diabetic daily meal plan')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition cursor-pointer">🥗 Diabetic Meal Plan</button>
+                        <button onclick="sendQuickPrompt('What is the difference between Dolo and Paracetamol generic?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition cursor-pointer">💊 Paracetamol / Dolo Savings</button>
+                        <button onclick="sendQuickPrompt('How do I manage high blood pressure naturally?')" class="text-[11px] bg-white border border-slate-200 hover:border-sky-400 px-2.5 py-1 rounded-lg text-slate-600 transition cursor-pointer">❤️ Blood Pressure Tips</button>
                     </div>
                 </div>
             </div>
@@ -610,7 +610,7 @@ def root():
                     <option value="USD ($)">USD ($)</option>
                 </select>
             </div>
-            <button onclick="runGenericSaver()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+            <button onclick="runGenericSaver()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer">
                 🔍 Calculate Generic Savings
             </button>
             <div id="genericResultBox" class="hidden p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-900 leading-relaxed font-mono"></div>
@@ -632,10 +632,10 @@ def root():
                 <div class="sm:col-span-2"><label class="text-xs font-bold text-slate-600 block mb-1">Stated Reason for Denial</label><input id="insDenialReason" type="text" value="Non-medical expenses, consumable deductions, room rent capping" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
             </div>
             <div class="flex gap-3">
-                <button onclick="runInsuranceAppeal()" class="bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+                <button onclick="runInsuranceAppeal()" class="bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer">
                     📝 Generate Formal Appeal Notice
                 </button>
-                <button onclick="downloadAppealPdf()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
+                <button onclick="downloadAppealPdf()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer">
                     📄 Download Legal PDF
                 </button>
             </div>
@@ -649,7 +649,7 @@ def root():
                 <p class="text-xs text-slate-500">Multi-drug pharmacokinetic interaction checks and contraindications.</p>
             </div>
             <input id="drugsInput" type="text" value="Aspirin + Ibuprofen + Warfarin" class="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500">
-            <button onclick="runDrugCheck()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+            <button onclick="runDrugCheck()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer">
                 ⚡ Evaluate Interactions
             </button>
             <div id="drugResultBox" class="hidden p-5 rounded-2xl bg-amber-50 border border-amber-200 text-sm text-amber-900 font-mono whitespace-pre-wrap leading-relaxed"></div>
@@ -667,7 +667,7 @@ def root():
                 <div><label class="text-xs font-bold text-slate-600 block mb-1">Pain Severity (1-10)</label><input id="triagePainSlider" type="range" min="1" max="10" value="8" class="w-full accent-rose-600"></div>
                 <div><label class="text-xs font-bold text-slate-600 block mb-1">Duration</label><input id="triageDuration" type="text" value="45 minutes" class="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-sky-500"></div>
             </div>
-            <button onclick="runTriage()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition">
+            <button onclick="runTriage()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer">
                 🚨 Compute ESI Acuity Score
             </button>
             <div id="triageResultBox" class="hidden p-5 rounded-2xl bg-rose-50 border border-rose-200 text-sm text-rose-900 font-mono whitespace-pre-wrap leading-relaxed"></div>
@@ -683,14 +683,28 @@ def root():
     </footer>
 
     <script>
+        // Bulletproof Tab Switching with explicit style.display AND classList
         function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('border-sky-500', 'shadow-md', 'ring-2', 'ring-sky-500/20');
+            console.log('Switching to tab:', tabId);
+            const allContents = document.querySelectorAll('.tab-content');
+            const allBtns = document.querySelectorAll('.tab-btn');
+
+            allContents.forEach(el => {
+                el.classList.add('hidden');
+                el.style.display = 'none';
+            });
+
+            allBtns.forEach(btn => {
+                btn.classList.remove('border-sky-500', 'shadow-md', 'ring-2', 'ring-sky-500/20', 'bg-white');
                 btn.classList.add('border-slate-200', 'bg-white/80');
             });
 
-            document.getElementById('tab-content-' + tabId).classList.remove('hidden');
+            const activeContent = document.getElementById('tab-content-' + tabId);
+            if (activeContent) {
+                activeContent.classList.remove('hidden');
+                activeContent.style.display = 'block';
+            }
+
             const activeBtn = document.getElementById('tab-btn-' + tabId);
             if (activeBtn) {
                 activeBtn.classList.remove('border-slate-200', 'bg-white/80');
@@ -699,14 +713,14 @@ def root():
         }
 
         function renderMarkdownToHTML(text) {
-            if (window.marked) {
+            if (window.marked && typeof window.marked.parse === 'function') {
                 try {
                     return marked.parse(text);
                 } catch(e) {
-                    return text.replace(/\n/g, '<br/>');
+                    console.error('Markdown parse error:', e);
                 }
             }
-            return text.replace(/\n/g, '<br/>');
+            return String(text).replace(/\\n/g, '<br/>');
         }
 
         async function sendMessage() {
@@ -732,7 +746,10 @@ def root():
             const isAnxiety = /panic|panicking|scared|anxious|anxiety|overwhelmed|heart racing/i.test(text);
             if (isAnxiety) {
                 const bBox = document.getElementById('breathingBox');
-                if (bBox) bBox.classList.remove('hidden');
+                if (bBox) {
+                    bBox.classList.remove('hidden');
+                    bBox.style.display = 'flex';
+                }
             }
 
             const langSelect = document.getElementById('langSelect');
@@ -755,6 +772,7 @@ def root():
                     <div class="max-w-[92%] sm:max-w-[88%] rounded-2xl px-5 py-3.5 text-sm bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200 leading-relaxed shadow-sm markdown-content">${formattedHtml}</div>`;
                 chatMessages.appendChild(botDiv);
             } catch (e) {
+                console.error('Chat error:', e);
                 const botDiv = document.createElement('div');
                 botDiv.className = 'flex items-start gap-3 justify-start';
                 botDiv.innerHTML = `
@@ -772,8 +790,11 @@ def root():
         }
 
         function sendQuickPrompt(prompt) {
-            document.getElementById('chatInput').value = prompt;
-            sendMessage();
+            const input = document.getElementById('chatInput');
+            if (input) {
+                input.value = prompt;
+                sendMessage();
+            }
         }
 
         function startVoiceRecognition() {
@@ -784,23 +805,32 @@ def root():
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             const rec = new SpeechRecognition();
             rec.onresult = (e) => {
-                document.getElementById('chatInput').value = e.results[0][0].transcript;
-                sendMessage();
+                const input = document.getElementById('chatInput');
+                if (input && e.results && e.results[0] && e.results[0][0]) {
+                    input.value = e.results[0][0].transcript;
+                    sendMessage();
+                }
             };
             rec.start();
         }
 
         async function runGenericSaver() {
-            const drug = document.getElementById('genericSearchInput').value.trim();
+            const drugInput = document.getElementById('genericSearchInput');
+            const drug = drugInput ? drugInput.value.trim() : '';
             const resBox = document.getElementById('genericResultBox');
+            if (!resBox) return;
             resBox.classList.remove('hidden');
+            resBox.style.display = 'block';
             resBox.innerText = 'Analyzing active molecules & computing savings...';
+
+            const currencySelect = document.getElementById('currencySelect');
+            const currency = currencySelect ? currencySelect.value : 'INR (₹)';
 
             try {
                 const res = await fetch('/api/generic-saver', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ drug_name: drug, currency: document.getElementById('currencySelect').value })
+                    body: JSON.stringify({ drug_name: drug, currency: currency })
                 });
                 const data = await res.json();
                 if (data.salt && data.generic_price) {
@@ -810,37 +840,44 @@ def root():
                         `<strong>🏷️ PMBJP Code:</strong> ${data.jan_aushadhi_code}<br/>` +
                         `<strong>🔬 Bioequivalence:</strong> FDA Orange Book AB-Rated (Equal Therapeutic Absorption & Kinetics)`;
                 } else {
-                    resBox.innerText = `Active Generic Molecule: Formulated Salt\nAverage Cost Savings: 70% to 85% vs Commercial Brand\nAsk your pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated equivalent.`;
+                    resBox.innerText = `Active Generic Molecule: Formulated Salt\\nAverage Cost Savings: 70% to 85% vs Commercial Brand\\nAsk your pharmacist for the Jan Aushadhi (PMBJP) or FDA AB-rated equivalent.`;
                 }
             } catch (e) {
-                resBox.innerText = `Active Molecule: Generic Salt Equivalent\nSavings: 70% - 85% Cheaper\nAsk your pharmacist for Jan Aushadhi (PMBJP) equivalent.`;
+                resBox.innerText = `Active Molecule: Generic Salt Equivalent\\nSavings: 70% - 85% Cheaper\\nAsk your pharmacist for Jan Aushadhi (PMBJP) equivalent.`;
             }
         }
 
         let lastAppealData = '';
         async function runInsuranceAppeal() {
-            const patient = document.getElementById('insPatientName').value;
-            const insurer = document.getElementById('insCompany').value;
-            const policy = document.getElementById('insPolicyNum').value;
-            const claim = document.getElementById('insClaimId').value;
-            const total = document.getElementById('insTotalBilled').value;
-            const denied = document.getElementById('insDeniedAmount').value;
-            const reason = document.getElementById('insDenialReason').value;
+            const patient = document.getElementById('insPatientName')?.value || 'Patient';
+            const insurer = document.getElementById('insCompany')?.value || 'Insurance Co';
+            const policy = document.getElementById('insPolicyNum')?.value || 'POL-123456';
+            const claim = document.getElementById('insClaimId')?.value || 'CLM-123456';
+            const total = document.getElementById('insTotalBilled')?.value || '₹1,00,000';
+            const denied = document.getElementById('insDeniedAmount')?.value || '₹30,000';
+            const reason = document.getElementById('insDenialReason')?.value || 'Non-medical expenses';
 
             const resBox = document.getElementById('appealResultBox');
             const appealText = document.getElementById('appealText');
-            resBox.classList.remove('hidden');
+            if (resBox) {
+                resBox.classList.remove('hidden');
+                resBox.style.display = 'block';
+            }
 
-            lastAppealData = `FORMAL HEALTH INSURANCE APPEAL NOTICE\n` +
-                `Policyholder: ${patient} | Policy #: ${policy} | Claim ID: #${claim}\n` +
-                `Insurer / TPA: ${insurer}\n` +
-                `Disputed Deduction: ${denied} (of ${total})\n\n` +
-                `Grounds for Reversal:\nUnder the IRDAI Master Circular (2024), arbitrary hospital deductions under '${reason}' are contestable. The attending physician documented non-elective medical necessity. Full disbursement of ${denied} is demanded within 15 days.`;
+            lastAppealData = `FORMAL HEALTH INSURANCE APPEAL NOTICE\\n` +
+                `Policyholder: ${patient} | Policy #: ${policy} | Claim ID: #${claim}\\n` +
+                `Insurer / TPA: ${insurer}\\n` +
+                `Disputed Deduction: ${denied} (of ${total})\\n\\n` +
+                `Grounds for Reversal:\\nUnder the IRDAI Master Circular (2024), arbitrary hospital deductions under '${reason}' are contestable. The attending physician documented non-elective medical necessity. Full disbursement of ${denied} is demanded within 15 days.`;
 
-            appealText.innerText = lastAppealData;
+            if (appealText) appealText.innerText = lastAppealData;
         }
 
         function downloadAppealPdf() {
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                alert('PDF generator is loading. Please try again in a moment.');
+                return;
+            }
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             doc.setFont('helvetica', 'bold');
@@ -858,36 +895,81 @@ def root():
 
             doc.setFontSize(10);
             doc.setTextColor(30, 41, 59);
-            const lines = doc.splitTextToSize(lastAppealData, 180);
+            const lines = doc.splitTextToSize(lastAppealData || 'Formal Dispute Notice under IRDAI Guidelines.', 180);
             doc.text(lines, 14, 40);
 
             doc.save('Health_Insurance_Appeal_Notice.pdf');
         }
 
         function runDrugCheck() {
-            const drugs = document.getElementById('drugsInput').value;
+            const drugs = document.getElementById('drugsInput')?.value || 'Aspirin + Ibuprofen';
             const box = document.getElementById('drugResultBox');
-            box.classList.remove('hidden');
-            box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\n` +
-                `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID & Antiplatelet Interaction)\n` +
-                `- Mechanism: Co-administration significantly increases gastrointestinal bleeding and ulceration risks.\n` +
-                `- Clinical Advice: Do not combine without direct physician authorization.`;
+            if (box) {
+                box.classList.remove('hidden');
+                box.style.display = 'block';
+                box.innerText = `### ⚠️ Pharmacology Evaluation: ${drugs}\\n` +
+                    `- Risk Level: 🔴 High / Synergistic Toxicity (NSAID & Antiplatelet Interaction)\\n` +
+                    `- Mechanism: Co-administration significantly increases gastrointestinal bleeding and ulceration risks.\\n` +
+                    `- Clinical Advice: Do not combine without direct physician authorization.`;
+            }
         }
 
         function runTriage() {
-            const body = document.getElementById('triageBodyPart').value;
-            const sym = document.getElementById('triagePrimarySymptom').value;
-            const pain = document.getElementById('triagePainSlider').value;
-            const dur = document.getElementById('triageDuration').value;
+            const body = document.getElementById('triageBodyPart')?.value || 'Chest / Cardiac';
+            const sym = document.getElementById('triagePrimarySymptom')?.value || 'Chest pain';
+            const pain = document.getElementById('triagePainSlider')?.value || '8';
+            const dur = document.getElementById('triageDuration')?.value || '45 minutes';
 
             const box = document.getElementById('triageResultBox');
-            box.classList.remove('hidden');
-            box.innerText = `### 🚨 ESI Triage Assessment: LEVEL 2 (EMERGENT)\n` +
-                `- Location: ${body} | Primary Complaint: ${sym}\n` +
-                `- Pain Severity: ${pain}/10 | Duration: ${dur}\n` +
-                `- Acuity Score: ESI-2 (High Risk / Emergent Evaluation Warranted)\n` +
-                `- Action Plan: Immediate clinical evaluation at nearest Emergency Department (ED). Do not drive alone.`;
+            if (box) {
+                box.classList.remove('hidden');
+                box.style.display = 'block';
+                box.innerText = `### 🚨 ESI Triage Assessment: LEVEL 2 (EMERGENT)\\n` +
+                    `- Location: ${body} | Primary Complaint: ${sym}\\n` +
+                    `- Pain Severity: ${pain}/10 | Duration: ${dur}\\n` +
+                    `- Acuity Score: ESI-2 (High Risk / Emergent Evaluation Warranted)\\n` +
+                    `- Action Plan: Immediate clinical evaluation at nearest Emergency Department (ED). Do not drive alone.`;
+            }
         }
+
+        // Attach Event Listeners on DOMContentLoaded for 100% Guaranteed Execution
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('HEALIO DOM initialized.');
+            
+            // Tab button click listeners
+            const tabs = ['chat', 'generic', 'appeal', 'drug', 'triage'];
+            tabs.forEach(tabId => {
+                const btn = document.getElementById('tab-btn-' + tabId);
+                if (btn) {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        switchTab(tabId);
+                    });
+                }
+            });
+
+            // Chat Form submit listener
+            const form = document.getElementById('chatForm');
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    sendMessage();
+                });
+            }
+
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) {
+                chatInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        sendMessage();
+                    }
+                });
+            }
+
+            // Ensure initial active tab is visible
+            switchTab('chat');
+        });
     </script>
 </body>
 </html>""")
